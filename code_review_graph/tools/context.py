@@ -4,34 +4,11 @@ from __future__ import annotations
 
 import logging
 import sqlite3
-import subprocess
-from pathlib import Path
 from typing import Any
 
-from ._common import _get_store, compact_response
+from ._common import _get_store, compact_response, resolve_changed_files
 
 logger = logging.getLogger(__name__)
-
-
-def _has_git_changes(root: Path, base: str) -> bool:
-    """Quick check for uncommitted or diffed changes."""
-    try:
-        result = subprocess.run(
-            ["git", "diff", "--name-only", base, "--"],
-            capture_output=True, stdin=subprocess.DEVNULL, text=True,
-            cwd=str(root), timeout=10,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            return True
-        # Also check staged/unstaged
-        result2 = subprocess.run(
-            ["git", "status", "--porcelain"],
-            capture_output=True, stdin=subprocess.DEVNULL, text=True,
-            cwd=str(root), timeout=10,
-        )
-        return bool(result2.stdout.strip())
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return False
 
 
 def get_minimal_context(
@@ -62,33 +39,29 @@ def get_minimal_context(
         risk_score = 0.0
         top_affected: list[str] = []
         test_gap_count = 0
-        if changed_files or _has_git_changes(root, base):
+        files, detect_meta = resolve_changed_files(root, changed_files, base)
+        if files:
             try:
                 from ..changes import analyze_changes
-                from ..incremental import get_changed_files as _get_changed
 
-                files = changed_files
-                if not files:
-                    files = _get_changed(root, base)
-                if files:
-                    abs_files = [str(root / f) for f in files]
-                    analysis = analyze_changes(
-                        store, abs_files, repo_root=str(root), base=base,
-                    )
-                    risk_score = analysis.get("risk_score", 0.0)
-                    risk = (
-                        "high" if risk_score > 0.7
-                        else "medium" if risk_score > 0.4
-                        else "low"
-                    )
-                    top_affected = [
-                        f.get("name", "")
-                        for f in analysis.get("changed_functions", [])[:5]
-                    ]
-                    test_gap_count = len(analysis.get("test_gaps", []))
+                abs_files = [str(root / f) for f in files]
+                analysis = analyze_changes(
+                    store, abs_files, repo_root=str(root), base=base,
+                )
+                risk_score = analysis.get("risk_score", 0.0)
+                risk = (
+                    "high" if risk_score > 0.7
+                    else "medium" if risk_score > 0.4
+                    else "low"
+                )
+                top_affected = [
+                    f.get("name", "")
+                    for f in analysis.get("changed_functions", [])[:5]
+                ]
+                test_gap_count = len(analysis.get("test_gaps", []))
             except (
                 ImportError, OSError, ValueError,
-                sqlite3.Error, subprocess.SubprocessError,
+                sqlite3.Error,
             ):
                 logger.debug("Risk analysis failed in get_minimal_context", exc_info=True)
 
@@ -137,6 +110,11 @@ def get_minimal_context(
         ]
         if risk != "unknown":
             summary_parts.append(f"Risk: {risk} ({risk_score:.2f}).")
+        if detect_meta.get("auto_detect_timed_out"):
+            summary_parts.append(
+                "Changed-file auto-detection timed out. "
+                "Pass changed_files for faster review tools."
+            )
         if test_gap_count:
             summary_parts.append(f"{test_gap_count} test gaps.")
 

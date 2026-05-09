@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -56,6 +60,123 @@ _BUILTIN_CALL_NAMES: set[str] = {
     "beforeAll", "afterAll", "mock", "spyOn",
     "require", "fetch",
 }
+
+
+_CHANGED_FILES_CACHE_LOCK = threading.Lock()
+_CHANGED_FILES_CACHE: dict[tuple[str, str], dict[str, Any]] = {}
+_CHANGED_FILES_CACHE_TTL = float(os.environ.get("CRG_CHANGED_FILES_CACHE_TTL", "3.0"))
+_FAST_DIFF_TIMEOUT = float(os.environ.get("CRG_FAST_DIFF_TIMEOUT", "5.0"))
+
+
+def _run_git(root: Path, args: list[str], timeout_s: float) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["git", *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(root),
+        timeout=timeout_s,
+        stdin=subprocess.DEVNULL,
+        check=False,
+    )
+
+
+def _normalize_changed_files(files: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for f in files:
+        rel = f.strip().replace("\\", "/")
+        if not rel or rel in seen:
+            continue
+        seen.add(rel)
+        out.append(rel)
+    return out
+
+
+def _parse_porcelain_paths(stdout: str) -> list[str]:
+    files: list[str] = []
+    for line in stdout.splitlines():
+        if not line.strip() or len(line) < 4:
+            continue
+        path_part = line[3:].strip()
+        # Handle rename lines: "old/path -> new/path"
+        if " -> " in path_part:
+            path_part = path_part.split(" -> ", 1)[1].strip()
+        files.append(path_part)
+    return files
+
+
+def resolve_changed_files(
+    root: Path,
+    changed_files: list[str] | None,
+    base: str,
+) -> tuple[list[str], dict[str, Any]]:
+    """Resolve changed files with fast auto-detect and short-lived cache.
+
+    Returns:
+        (files, meta)
+        meta includes:
+          - source: explicit | cache | auto
+          - auto_detect_timed_out: bool
+          - timeout_seconds: float
+          - cache_hit: bool
+    """
+    if changed_files is not None:
+        return _normalize_changed_files(changed_files), {
+            "source": "explicit",
+            "auto_detect_timed_out": False,
+            "timeout_seconds": _FAST_DIFF_TIMEOUT,
+            "cache_hit": False,
+        }
+
+    cache_key = (str(root.resolve()), base)
+    now = time.monotonic()
+    with _CHANGED_FILES_CACHE_LOCK:
+        cached = _CHANGED_FILES_CACHE.get(cache_key)
+        if cached and (now - float(cached["ts"])) <= _CHANGED_FILES_CACHE_TTL:
+            return list(cached["files"]), {
+                "source": "cache",
+                "auto_detect_timed_out": False,
+                "timeout_seconds": _FAST_DIFF_TIMEOUT,
+                "cache_hit": True,
+            }
+
+    timed_out = False
+    files: list[str] = []
+    try:
+        diff = _run_git(root, ["diff", "--name-only", base, "--"], _FAST_DIFF_TIMEOUT)
+        if diff.returncode == 0:
+            files.extend(diff.stdout.splitlines())
+        else:
+            cached_only = _run_git(
+                root,
+                ["diff", "--name-only", "--cached"],
+                _FAST_DIFF_TIMEOUT,
+            )
+            if cached_only.returncode == 0:
+                files.extend(cached_only.stdout.splitlines())
+
+        status = _run_git(
+            root,
+            ["status", "--porcelain", "--untracked-files=no"],
+            _FAST_DIFF_TIMEOUT,
+        )
+        if status.returncode == 0:
+            files.extend(_parse_porcelain_paths(status.stdout))
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        timed_out = True
+
+    normalized = _normalize_changed_files(files)
+    with _CHANGED_FILES_CACHE_LOCK:
+        _CHANGED_FILES_CACHE[cache_key] = {"ts": now, "files": normalized}
+
+    return normalized, {
+        "source": "auto",
+        "auto_detect_timed_out": timed_out,
+        "timeout_seconds": _FAST_DIFF_TIMEOUT,
+        "cache_hit": False,
+    }
 
 
 def _validate_repo_root(path: "Path | str") -> Path:

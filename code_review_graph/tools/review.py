@@ -10,8 +10,7 @@ from ..changes import analyze_changes, parse_diff_ranges, parse_git_diff_ranges 
 from ..flows import get_affected_flows as _get_affected_flows
 from ..graph import edge_to_dict, node_to_dict
 from ..hints import generate_hints, get_session
-from ..incremental import get_changed_files, get_staged_and_unstaged
-from ._common import _get_store
+from ._common import _get_store, resolve_changed_files
 
 logger = logging.getLogger(__name__)
 
@@ -53,12 +52,21 @@ def get_review_context(
     store, root = _get_store(repo_root)
     try:
         # Get impact radius first
-        if changed_files is None:
-            changed_files = get_changed_files(root, base)
-            if not changed_files:
-                changed_files = get_staged_and_unstaged(root)
+        changed_files, detect_meta = resolve_changed_files(root, changed_files, base)
 
         if not changed_files:
+            if detect_meta.get("auto_detect_timed_out"):
+                timeout_s = detect_meta.get("timeout_seconds", 0)
+                return {
+                    "status": "ok",
+                    "summary": (
+                        "Auto-detection of changed files timed out "
+                        f"after {timeout_s:.1f}s. Pass changed_files explicitly "
+                        "for a fast and reliable review context."
+                    ),
+                    "context": {},
+                    "requires_changed_files": True,
+                }
             return {
                 "status": "ok",
                 "summary": "No changes detected. Nothing to review.",
@@ -304,12 +312,22 @@ def get_affected_flows_func(
     """
     store, root = _get_store(repo_root)
     try:
-        if changed_files is None:
-            changed_files = get_changed_files(root, base)
-            if not changed_files:
-                changed_files = get_staged_and_unstaged(root)
+        changed_files, detect_meta = resolve_changed_files(root, changed_files, base)
 
         if not changed_files:
+            if detect_meta.get("auto_detect_timed_out"):
+                timeout_s = detect_meta.get("timeout_seconds", 0)
+                return {
+                    "status": "ok",
+                    "summary": (
+                        "Auto-detection of changed files timed out "
+                        f"after {timeout_s:.1f}s. Pass changed_files explicitly "
+                        "to compute affected flows quickly."
+                    ),
+                    "affected_flows": [],
+                    "total": 0,
+                    "requires_changed_files": True,
+                }
             return {
                 "status": "ok",
                 "summary": "No changed files detected.",
@@ -381,12 +399,25 @@ def detect_changes_func(
     store, root = _get_store(repo_root)
     try:
         # Detect changed files if not provided.
-        if changed_files is None:
-            changed_files = get_changed_files(root, base)
-            if not changed_files:
-                changed_files = get_staged_and_unstaged(root)
+        changed_files, detect_meta = resolve_changed_files(root, changed_files, base)
 
         if not changed_files:
+            if detect_meta.get("auto_detect_timed_out"):
+                timeout_s = detect_meta.get("timeout_seconds", 0)
+                return {
+                    "status": "ok",
+                    "summary": (
+                        "Auto-detection of changed files timed out "
+                        f"after {timeout_s:.1f}s. Pass changed_files explicitly "
+                        "to run detect_changes without delay."
+                    ),
+                    "risk_score": 0.0,
+                    "changed_functions": [],
+                    "affected_flows": [],
+                    "test_gaps": [],
+                    "review_priorities": [],
+                    "requires_changed_files": True,
+                }
             return {
                 "status": "ok",
                 "summary": "No changed files detected.",

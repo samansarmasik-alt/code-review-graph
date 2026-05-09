@@ -436,8 +436,10 @@ class TestChanges:
         # and get_changed_files/get_staged_and_unstaged to return empty.
         with (
             patch("code_review_graph.tools.review._get_store") as mock_get_store,
-            patch("code_review_graph.tools.review.get_changed_files", return_value=[]),
-            patch("code_review_graph.tools.review.get_staged_and_unstaged", return_value=[]),
+            patch(
+                "code_review_graph.tools.review.resolve_changed_files",
+                return_value=([], {"auto_detect_timed_out": False}),
+            ),
         ):
             mock_get_store.return_value = (self.store, Path("/fake/repo"))
             # Prevent the store from being closed by the tool
@@ -458,7 +460,10 @@ class TestChanges:
 
         with (
             patch("code_review_graph.tools.review._get_store") as mock_get_store,
-            patch("code_review_graph.tools.review.get_changed_files", return_value=["app.py"]),
+            patch(
+                "code_review_graph.tools.review.resolve_changed_files",
+                return_value=(["app.py"], {"auto_detect_timed_out": False}),
+            ),
             patch(
                 "code_review_graph.tools.review.parse_git_diff_ranges",
                 return_value={"app.py": [(1, 10)]},
@@ -473,3 +478,22 @@ class TestChanges:
             assert "risk_score" in result
             assert "test_gaps" in result
             assert "review_priorities" in result
+
+    def test_detect_changes_tool_timeout_requires_changed_files(self):
+        """Timeout in changed-file auto-detection returns explicit fast-path guidance."""
+        from code_review_graph.tools import detect_changes_func
+
+        with (
+            patch("code_review_graph.tools.review._get_store") as mock_get_store,
+            patch(
+                "code_review_graph.tools.review.resolve_changed_files",
+                return_value=([], {"auto_detect_timed_out": True, "timeout_seconds": 5.0}),
+            ),
+        ):
+            mock_get_store.return_value = (self.store, Path("/fake/repo"))
+            self.store.close = lambda: None
+
+            result = detect_changes_func(base="HEAD~1", repo_root="/fake/repo")
+            assert result["status"] == "ok"
+            assert result["requires_changed_files"] is True
+            assert "timed out" in result["summary"]

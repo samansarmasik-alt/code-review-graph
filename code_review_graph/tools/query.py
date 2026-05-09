@@ -9,9 +9,9 @@ from typing import Any
 from ..embeddings import EmbeddingStore
 from ..graph import _sanitize_name, edge_to_dict, node_to_dict
 from ..hints import generate_hints, get_session
-from ..incremental import get_changed_files, get_db_path, get_staged_and_unstaged
+from ..incremental import get_db_path
 from ..search import hybrid_search
-from ._common import _BUILTIN_CALL_NAMES, _get_store
+from ._common import _BUILTIN_CALL_NAMES, _get_store, resolve_changed_files
 
 logger = logging.getLogger(__name__)
 
@@ -56,12 +56,25 @@ def get_impact_radius(
     """
     store, root = _get_store(repo_root)
     try:
-        if changed_files is None:
-            changed_files = get_changed_files(root, base)
-            if not changed_files:
-                changed_files = get_staged_and_unstaged(root)
+        changed_files, detect_meta = resolve_changed_files(root, changed_files, base)
 
         if not changed_files:
+            if detect_meta.get("auto_detect_timed_out"):
+                timeout_s = detect_meta.get("timeout_seconds", 0)
+                return {
+                    "status": "ok",
+                    "summary": (
+                        "Auto-detection of changed files timed out "
+                        f"after {timeout_s:.1f}s. Pass changed_files explicitly "
+                        "to compute impact radius quickly."
+                    ),
+                    "changed_nodes": [],
+                    "impacted_nodes": [],
+                    "impacted_files": [],
+                    "truncated": False,
+                    "total_impacted": 0,
+                    "requires_changed_files": True,
+                }
             return {
                 "status": "ok",
                 "summary": "No changed files detected.",
