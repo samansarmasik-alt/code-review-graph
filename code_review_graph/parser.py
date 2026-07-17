@@ -9,16 +9,19 @@ from __future__ import annotations
 import ast
 import hashlib
 import html
+import importlib
 import json
 import logging
+import math
+import os
 import re
+import subprocess
+import sys
 import threading
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 from typing import NamedTuple, Optional
-
-import tree_sitter_language_pack as tslp
 
 from .custom_languages import CustomLanguage, load_custom_languages
 from .tsconfig_resolver import TsconfigResolver
@@ -51,6 +54,102 @@ _SQL_KEYWORDS: frozenset[str] = frozenset({
 })
 
 logger = logging.getLogger(__name__)
+
+_DEFAULT_PARSER_LOAD_TIMEOUT_SECONDS = 5.0
+_PARSER_PROBE_RESULTS: dict[str, bool] = {}
+_PARSER_PROBE_LOCK = threading.Lock()
+_EXPECTED_PARSER_LOAD_ERRORS = (ImportError, LookupError, OSError, ValueError)
+
+
+def _parser_load_timeout_seconds() -> float:
+    """Return a safe positive timeout for native grammar probes."""
+    raw = os.environ.get(
+        "CRG_PARSER_LOAD_TIMEOUT_SECONDS",
+        str(_DEFAULT_PARSER_LOAD_TIMEOUT_SECONDS),
+    )
+    try:
+        timeout = float(raw)
+    except ValueError:
+        timeout = _DEFAULT_PARSER_LOAD_TIMEOUT_SECONDS
+    if not math.isfinite(timeout) or timeout <= 0:
+        timeout = _DEFAULT_PARSER_LOAD_TIMEOUT_SECONDS
+    return timeout
+
+
+def _run_parser_load_probe(grammar: str, timeout_seconds: float) -> bool:
+    """Probe one native grammar in a disposable interpreter process."""
+    code = (
+        "from tree_sitter_language_pack import get_parser\n"
+        "import sys\n"
+        "get_parser(sys.argv[1])\n"
+    )
+    try:
+        completed = subprocess.run(
+            [sys.executable, "-I", "-c", code, grammar],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=timeout_seconds,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        logger.debug("tree-sitter parser probe failed for %s: %s", grammar, exc)
+        return False
+    return completed.returncode == 0
+
+
+def _parser_load_probe_succeeds(
+    grammar: str,
+    timeout_seconds: float | None = None,
+) -> bool:
+    """Return a process-cached result for one bounded grammar probe.
+
+    The lock deliberately covers the subprocess call: parallel parser users
+    must not start duplicate probes for the same grammar while the first one
+    is still running.
+    """
+    with _PARSER_PROBE_LOCK:
+        cached = _PARSER_PROBE_RESULTS.get(grammar)
+        if cached is not None:
+            return cached
+        timeout = (
+            _parser_load_timeout_seconds()
+            if timeout_seconds is None
+            else timeout_seconds
+        )
+        result = _run_parser_load_probe(grammar, timeout)
+        _PARSER_PROBE_RESULTS[grammar] = result
+        if not result:
+            logger.warning(
+                "Skipping unavailable tree-sitter parser for %s",
+                grammar,
+            )
+        return result
+
+
+def _mark_parser_unavailable(grammar: str) -> None:
+    """Prevent repeated parent-process loads after an expected failure."""
+    with _PARSER_PROBE_LOCK:
+        _PARSER_PROBE_RESULTS[grammar] = False
+
+
+def _clear_parser_probe_cache() -> None:
+    """Clear process-level probe state (used by focused tests)."""
+    with _PARSER_PROBE_LOCK:
+        _PARSER_PROBE_RESULTS.clear()
+
+
+def _load_tree_sitter_parser(grammar: str):
+    """Load a probed grammar, suppressing only known availability errors."""
+    if not _parser_load_probe_succeeds(grammar):
+        return None
+    try:
+        language_pack = importlib.import_module("tree_sitter_language_pack")
+        return language_pack.get_parser(grammar)  # type: ignore[attr-defined]
+    except _EXPECTED_PARSER_LOAD_ERRORS as exc:
+        _mark_parser_unavailable(grammar)
+        logger.debug("tree-sitter parser unavailable for %s: %s", grammar, exc)
+        return None
 
 
 _PhpPsr4Mappings = tuple[tuple[str, tuple[str, ...]], ...]
@@ -1124,12 +1223,10 @@ class CodeParser:
             # Custom languages map their name onto a packaged grammar.
             custom = self._custom_languages.get(language)
             grammar = custom.grammar if custom is not None else language
-            try:
-                self._parsers[language] = tslp.get_parser(grammar)  # type: ignore[arg-type]
-            except (LookupError, ValueError, ImportError) as exc:
-                # language not packaged, or grammar load failed
-                logger.debug("tree-sitter parser unavailable for %s: %s", language, exc)
+            parser = _load_tree_sitter_parser(grammar)
+            if parser is None:
                 return None
+            self._parsers[language] = parser
         return self._parsers[language]
 
     def detect_language(self, path: Path) -> Optional[str]:
