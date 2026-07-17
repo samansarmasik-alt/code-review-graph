@@ -32,6 +32,15 @@ def _zed_settings_path() -> Path:
     return Path.home() / ".config" / "zed" / "settings.json"
 
 
+def _opencode_config_path(repo_root: Path) -> Path:
+    """Return OpenCode's existing project config, preferring JSONC."""
+    for name in ("opencode.jsonc", "opencode.json"):
+        path = repo_root / name
+        if path.exists():
+            return path
+    return repo_root / "opencode.jsonc"
+
+
 PLATFORMS: dict[str, dict[str, Any]] = {
     "codex": {
         "name": "Codex",
@@ -83,11 +92,11 @@ PLATFORMS: dict[str, dict[str, Any]] = {
     },
     "opencode": {
         "name": "OpenCode",
-        "config_path": lambda root: root / ".opencode.json",
-        "key": "mcpServers",
+        "config_path": _opencode_config_path,
+        "key": "mcp",
         "detect": lambda: True,
         "format": "object",
-        "needs_type": True,
+        "needs_type": False,
     },
     "antigravity": {
         "name": "Antigravity",
@@ -234,15 +243,41 @@ def _build_server_entry(
 ) -> dict[str, Any]:
     """Build the MCP server entry for a platform."""
     command, args = _detect_serve_command()
+    if key == "opencode":
+        opencode_command = [command, *args]
+        if repo_root is not None:
+            opencode_command.extend(("--repo", str(repo_root)))
+        return {"type": "local", "command": opencode_command}
+
     entry: dict[str, Any] = {"command": command, "args": args}
     # Include cwd so the MCP server can find the graph database
     if repo_root is not None:
         entry["cwd"] = str(repo_root)
     if plat["needs_type"]:
         entry["type"] = "stdio"
-    if key == "opencode":
-        entry["env"] = []
     return entry
+
+
+def _warn_legacy_opencode_config(repo_root: Path) -> None:
+    """Warn without modifying the obsolete Cursor-shaped OpenCode config."""
+    legacy = repo_root / ".opencode.json"
+    if not legacy.exists():
+        return
+    try:
+        parsed = json.loads(
+            _strip_jsonc(legacy.read_text(encoding="utf-8", errors="replace"))
+        )
+    except (json.JSONDecodeError, OSError):
+        return
+    if not isinstance(parsed, dict):
+        return
+    servers = parsed.get("mcpServers")
+    if isinstance(servers, dict) and "code-review-graph" in servers:
+        print(
+            f"  OpenCode: legacy config found at {legacy}; leaving it unchanged. "
+            "OpenCode now reads opencode.json or opencode.jsonc with a top-level "
+            "'mcp' setting."
+        )
 
 
 def _format_toml_value(value: Any) -> str:
@@ -395,6 +430,8 @@ def install_platform_configs(
     configured: list[str] = []
 
     for key, plat in platforms_to_install.items():
+        if key == "opencode":
+            _warn_legacy_opencode_config(repo_root)
         config_path: Path = plat["config_path"](repo_root)
         server_key = plat["key"]
         server_entry = _build_server_entry(plat, key=key, repo_root=repo_root)
@@ -498,7 +535,7 @@ def install_platform_configs(
 
 _SKILLS: dict[str, dict[str, str]] = {
     "explore-codebase.md": {
-        "name": "Explore Codebase",
+        "name": "explore-codebase",
         "description": "Navigate and understand codebase structure using the knowledge graph",
         "body": (
             "## Explore Codebase\n\n"
@@ -526,7 +563,7 @@ _SKILLS: dict[str, dict[str, str]] = {
         ),
     },
     "review-changes.md": {
-        "name": "Review Changes",
+        "name": "review-changes",
         "description": "Perform a structured code review using change detection and impact",
         "body": (
             "## Review Changes\n\n"
@@ -554,7 +591,7 @@ _SKILLS: dict[str, dict[str, str]] = {
         ),
     },
     "debug-issue.md": {
-        "name": "Debug Issue",
+        "name": "debug-issue",
         "description": "Systematically debug issues using graph-powered code navigation",
         "body": (
             "## Debug Issue\n\n"
@@ -580,7 +617,7 @@ _SKILLS: dict[str, dict[str, str]] = {
         ),
     },
     "refactor-safely.md": {
-        "name": "Refactor Safely",
+        "name": "refactor-safely",
         "description": "Plan and execute safe refactoring using dependency analysis",
         "body": (
             "## Refactor Safely\n\n"

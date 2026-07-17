@@ -95,37 +95,44 @@ def _run_temporal_resolver(store: GraphStore) -> Optional[dict]:
 
 # Default ignore patterns (in addition to .gitignore).
 #
-# `<dir>/**` patterns are matched at any depth by _should_ignore, so
-# `node_modules/**` also excludes `packages/app/node_modules/react/index.js`
-# inside monorepos. See: #91
+# ``**/<dir>/**`` patterns are safe-anywhere directory exclusions.  A leading
+# slash anchors a pattern to the repository root, which prevents ambiguous
+# output names such as ``build`` and ``dist`` from hiding nested source
+# directories.  See: #91 and PR #92.
 DEFAULT_IGNORE_PATTERNS = [
-    ".code-review-graph/**",
-    "node_modules/**",
-    ".git/**",
-    ".svn/**",
-    "__pycache__/**",
+    "**/.code-review-graph/**",
+    "**/node_modules/**",
+    "**/.git/**",
+    "**/.svn/**",
+    "**/__pycache__/**",
     "*.pyc",
-    ".venv/**",
-    "venv/**",
-    "dist/**",
-    "build/**",
-    ".next/**",
-    "target/**",
+    "**/.venv/**",
+    "**/venv/**",
+    "/dist/**",
+    "/build/**",
+    "/.next/**",
+    "/.nuxt/**",
+    "/target/**",
+    "/bin/**",
+    "/obj/**",
     # PHP / Laravel / Composer
-    "vendor/**",
-    "bootstrap/cache/**",
-    "public/build/**",
+    "**/vendor/**",
+    "/storage/**",
+    "/bootstrap/cache/**",
+    "/public/build/**",
     # Ruby / Bundler
-    ".bundle/**",
+    "**/.bundle/**",
     # Java / Kotlin / Gradle
-    ".gradle/**",
+    "**/.gradle/**",
     "*.jar",
     # Dart / Flutter
-    ".dart_tool/**",
-    ".pub-cache/**",
+    "**/.dart_tool/**",
+    "**/.pub-cache/**",
     # General
-    "coverage/**",
-    ".cache/**",
+    "/coverage/**",
+    "**/.cache/**",
+    "/.tmp/**",
+    "/tmp/**",  # nosec B108 -- repo-relative ignore glob, not a temp-file path
     "*.min.js",
     "*.min.css",
     "*.map",
@@ -359,12 +366,20 @@ def _load_ignore_patterns(repo_root: Path) -> list[str]:
         for line in ignore_file.read_text(encoding="utf-8", errors="replace").splitlines():
             line = line.strip()
             if line and not line.startswith("#"):
-                # Treat plain directory entries like `.venv/` or `vendor/` as
-                # recursive globs, matching `.gitignore` behavior for directories.
-                if line.startswith("/"):
-                    line = line[1:]
+                # Directory names without a slash match at any depth, as in
+                # .gitignore. A leading slash remains an explicit root anchor.
                 if line.endswith("/"):
-                    line = f"{line}**"
+                    prefix = line[:-1]
+                    if prefix.startswith("/") or "/" in prefix:
+                        line = f"{prefix}/**"
+                    else:
+                        line = f"**/{prefix}/**"
+                elif line.endswith("/**") and not line.startswith(("/", "**/")):
+                    prefix = line[:-3]
+                    if "/" in prefix:
+                        line = f"/{line}"
+                    else:
+                        line = f"**/{line}"
                 if line:
                     patterns.append(line)
     return patterns
@@ -373,27 +388,33 @@ def _load_ignore_patterns(repo_root: Path) -> list[str]:
 def _should_ignore(path: str, patterns: list[str]) -> bool:
     """Check if a path matches any ignore pattern.
 
-    Handles nested occurrences of ``<dir>/**`` patterns: for example,
-    ``node_modules/**`` also matches ``packages/app/node_modules/foo.js``
-    inside monorepos. ``fnmatch`` alone treats ``*`` as not crossing ``/``
-    and only matches the prefix, so we additionally test each path segment
-    against the bare prefix of ``<dir>/**`` patterns. See: #91
+    ``**/<dir>/**`` and unanchored single-directory patterns match at any
+    depth. A leading slash anchors a pattern to the repository root.
     """
-    # Direct fnmatch first (cheap)
-    if any(fnmatch.fnmatch(path, p) for p in patterns):
-        return True
-    # Then: treat simple single-segment "dir/**" patterns as
-    # "this directory at any depth".
-    parts = PurePosixPath(path).parts
-    for p in patterns:
-        if not p.endswith("/**"):
+    normalized = path.replace("\\", "/").lstrip("/")
+    parts = PurePosixPath(normalized).parts
+    for pattern in patterns:
+        anchored = pattern.startswith("/")
+        candidate = pattern[1:] if anchored else pattern
+
+        if candidate.startswith("**/") and candidate.endswith("/**"):
+            segment = candidate[3:-3]
+            if segment and segment in parts:
+                return True
             continue
-        prefix = p[:-3]
-        # Only single-segment dir patterns (no "/" inside the prefix)
-        # qualify for nested matching.
-        if "/" in prefix or not prefix:
+
+        if candidate.endswith("/**"):
+            prefix = tuple(part for part in candidate[:-3].split("/") if part)
+            if not prefix:
+                continue
+            if anchored or len(prefix) > 1:
+                if parts[: len(prefix)] == prefix:
+                    return True
+            elif prefix[0] in parts:
+                return True
             continue
-        if prefix in parts:
+
+        if fnmatch.fnmatch(normalized, candidate):
             return True
     return False
 

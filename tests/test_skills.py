@@ -2,8 +2,8 @@
 
 import json
 import os
-import subprocess
 import stat
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -19,11 +19,11 @@ from code_review_graph.skills import (
     _CLAUDE_MD_SECTION_MARKER,
     PLATFORMS,
     _cursor_hook_scripts,
-    _strip_jsonc,
     _detect_serve_command,
     _in_poetry_project,
     _in_uv_project,
     _opencode_plugin_content,
+    _strip_jsonc,
     generate_codex_hooks_config,
     generate_cursor_hooks_config,
     generate_hooks_config,
@@ -31,9 +31,9 @@ from code_review_graph.skills import (
     inject_claude_md,
     inject_platform_instructions,
     install_codex_hooks,
+    install_cursor_hooks,
     install_gemini_cli_hooks,
     install_gemini_cli_skills,
-    install_cursor_hooks,
     install_git_hook,
     install_hooks,
     install_opencode_plugin,
@@ -141,6 +141,24 @@ class TestGenerateSkills:
             assert lines[0] == "---"
             closing_idx = content.index("---", 4)
             assert closing_idx > 0
+
+    def test_skill_frontmatter_names_match_lowercase_directories(self, tmp_path):
+        """Generated and bundled skills use the discovery-safe name format."""
+        generated = generate_skills(tmp_path)
+        bundled = Path(__file__).parents[1] / "skills"
+
+        for skill_name in (
+            "debug-issue",
+            "explore-codebase",
+            "refactor-safely",
+            "review-changes",
+        ):
+            for skill_file in (
+                generated / skill_name / "SKILL.md",
+                bundled / skill_name / "SKILL.md",
+            ):
+                content = skill_file.read_text(encoding="utf-8")
+                assert f"\nname: {skill_name}\n" in content
 
     def test_custom_skills_dir(self, tmp_path):
         custom = tmp_path / "my-skills"
@@ -865,11 +883,58 @@ class TestInstallPlatformConfigs:
     def test_install_opencode_config(self, tmp_path):
         configured = install_platform_configs(tmp_path, target="opencode")
         assert "OpenCode" in configured
-        config_path = tmp_path / ".opencode.json"
+        config_path = tmp_path / "opencode.jsonc"
         data = json.loads(config_path.read_text())
-        entry = data["mcpServers"]["code-review-graph"]
-        assert entry["type"] == "stdio"
-        assert entry["env"] == []
+        entry = data["mcp"]["code-review-graph"]
+        command, args = _detect_serve_command()
+        assert entry == {
+            "type": "local",
+            "command": [command, *args, "--repo", str(tmp_path)],
+        }
+        assert "cwd" not in entry
+
+    def test_install_opencode_prefers_existing_jsonc_and_preserves_servers(self, tmp_path):
+        config_path = tmp_path / "opencode.jsonc"
+        config_path.write_text(
+            '{\n  // keep this server\n  "mcp": {\n'
+            '    "other": {"type": "local", "command": ["other"]},\n'
+            "  },\n}\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "opencode.json").write_text("{}", encoding="utf-8")
+
+        install_platform_configs(tmp_path, target="opencode")
+
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+        assert "other" in data["mcp"]
+        assert "code-review-graph" in data["mcp"]
+        assert (tmp_path / "opencode.json").read_text(encoding="utf-8") == "{}"
+
+    def test_install_opencode_uses_existing_json(self, tmp_path):
+        config_path = tmp_path / "opencode.json"
+        config_path.write_text(json.dumps({"mcp": {"other": {}}}), encoding="utf-8")
+
+        install_platform_configs(tmp_path, target="opencode")
+
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+        assert "other" in data["mcp"]
+        assert "code-review-graph" in data["mcp"]
+        assert not (tmp_path / "opencode.jsonc").exists()
+
+    def test_install_opencode_warns_about_legacy_dotfile(self, tmp_path, capsys):
+        legacy = tmp_path / ".opencode.json"
+        legacy.write_text(
+            json.dumps({"mcpServers": {"code-review-graph": {"command": "uvx"}}}),
+            encoding="utf-8",
+        )
+
+        install_platform_configs(tmp_path, target="opencode")
+
+        output = capsys.readouterr().out
+        assert ".opencode.json" in output
+        assert "legacy" in output.lower()
+        assert legacy.exists()
+        assert (tmp_path / "opencode.jsonc").exists()
 
     def test_install_gemini_cli_config(self, tmp_path):
         gemini_config = tmp_path / ".gemini" / "settings.json"
@@ -960,7 +1025,7 @@ class TestInstallPlatformConfigs:
         assert "OpenCode" in configured
         assert codex_config.exists()
         assert (tmp_path / ".mcp.json").exists()
-        assert (tmp_path / ".opencode.json").exists()
+        assert (tmp_path / "opencode.jsonc").exists()
 
     def test_merge_existing_servers(self, tmp_path):
         """Should not overwrite existing MCP servers."""
@@ -1472,7 +1537,7 @@ class TestCopilotCLIPlatform:
         assert "code-review-graph" in data["servers"]
 
     def test_copilot_cli_writes_only_copilot_instructions(self, tmp_path):
-        """inject_platform_instructions with target='copilot-cli' writes .github/code-review-graph.instruction.md."""
+        """Copilot CLI injection writes its GitHub instruction file."""
         updated = inject_platform_instructions(tmp_path, target="copilot-cli")
         assert ".github/code-review-graph.instruction.md" in updated
         instructions = tmp_path / ".github" / "code-review-graph.instruction.md"
