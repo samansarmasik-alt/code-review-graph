@@ -68,6 +68,12 @@ To turn the review into a merge gate:
 | `fail-on-risk` | no | `none` | Fail the job when the overall risk score reaches a level: `none` (never fail), `high` (risk ≥ 0.70), `critical` (risk ≥ 0.85). |
 | `python-version` | no | `3.12` | Python version used to run code-review-graph (3.10+ supported). |
 
+## Outputs
+
+| Output | Description |
+|--------|-------------|
+| `comment-file` | Runner-local path to the rendered markdown report. Use with `comment: false` when a separate trusted workflow will publish it. |
+
 ### Risk levels
 
 `detect-changes` produces a 0.0–1.0 overall risk score (max across changed
@@ -127,10 +133,11 @@ database) with `actions/cache`:
 
 ## Security notes
 
-- **Token scope**: the action needs only `pull-requests: write` (to post the
-  comment) and `contents: read` (for checkout). Grant exactly that in the
-  workflow's `permissions:` block — the examples above do. The token is used
-  for nothing except listing/creating/updating the one PR comment.
+- **Token scope**: direct commenting needs `contents: read` for checkout and
+  `pull-requests: write` to post the comment. In the split fork-safe setup,
+  the analysis workflow needs only `contents: read`; the trusted commenter
+  needs only `actions: read` and `pull-requests: write`. Grant exactly those
+  permissions in each workflow.
 - **Local-first**: analysis runs entirely on the runner. No code, diff, or
   metadata leaves GitHub's infrastructure; there is no external API, account,
   or key.
@@ -143,16 +150,29 @@ database) with `actions/cache`:
 - **Pinning**: when consuming the action from another repository, pin
   `uses:` to a release tag or commit SHA rather than `@main`.
 - **Fork PRs**: `pull_request` runs from forks receive a read-only
-  `GITHUB_TOKEN`, so the comment step will fail for fork PRs unless you use
-  `pull_request_target` — which checks out trusted base-branch workflow
-  code; understand [the security implications](https://securitylab.github.com/resources/github-actions-preventing-pwn-requests/)
-  before switching, or set `comment: false` for fork PRs.
+  `GITHUB_TOKEN`, so they cannot post the comment directly. Use an
+  unprivileged `pull_request` workflow with `comment: false`, upload the
+  `comment-file` as an artifact, and publish it from a separate trusted
+  `workflow_run` workflow. See
+  [`.github/workflows/pr-review.yml`](../.github/workflows/pr-review.yml) and
+  [`.github/workflows/pr-review-comment.yml`](../.github/workflows/pr-review-comment.yml).
+  GitHub loads the `workflow_run` workflow from the default branch, so the
+  trusted commenting half becomes active only after that workflow is merged.
+  The privileged workflow must verify the source event and analyzed commit,
+  extract only under `runner.temp`, cap and validate the artifact, and add its
+  own sticky marker before posting. Avoid `pull_request_target` with a checkout
+  of PR code because it can execute untrusted code with a privileged token
+  ([details](https://securitylab.github.com/resources/github-actions-preventing-pwn-requests/)).
 
 ## Dogfooding
 
 This repository runs the action on its own PRs via
 [`.github/workflows/pr-review.yml`](../.github/workflows/pr-review.yml),
-which `uses: ./` (the local `action.yml`).
+which runs the local `action.yml` without write permissions and uploads the
+rendered report. The trusted
+[`pr-review-comment.yml`](../.github/workflows/pr-review-comment.yml) workflow
+validates that artifact and posts the sticky comment without checking out or
+executing PR-controlled code.
 
 ## Rendering script
 
