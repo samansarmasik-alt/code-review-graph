@@ -4,6 +4,17 @@
 
 ### ForceGraph additions
 
+- Added Task Passports: one compact shared record for goal, status, owner,
+  summary, and next action, automatically included in context responses.
+- Added `forcegraph_passport_tool` with read, update, claim, complete, and
+  handoff actions plus fail-safe action fallback.
+- Replaced hard token/memory rejection with soft optimization: large notes stay
+  local in full, while model-facing reads, result counts, and graph depth adapt
+  to the requested budget.
+- Made context routing, shared memory, and passports fail-soft so coordination
+  failures do not invalidate otherwise useful code context.
+- Expanded the default compact surface from four to five agent-facing tools.
+
 - Rewrote the README around plain-language outcomes, a 30-second setup, concrete
   examples, an honest upstream comparison, multi-agent behavior, limitations,
   and a clear token-savings explanation.

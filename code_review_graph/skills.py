@@ -281,7 +281,7 @@ def _build_server_entry(
 ) -> dict[str, Any]:
     """Build the MCP server entry for a platform."""
     command, args = _detect_serve_command()
-    # Connected projects use the compact four-tool gateway by default.
+    # Connected projects use the compact five-tool gateway by default.
     # Manual `serve` keeps the backwards-compatible full surface.
     args = [*args, "--tool-profile", "compact"]
     if key == "opencode":
@@ -622,7 +622,8 @@ _SKILLS: dict[str, dict[str, str]] = {
             "- Target: complete any review/debug/refactor task in ≤5 tool calls "
             "and ≤800 total output tokens.\n"
             "- For parallel-agent work, publish decisions and handoffs with "
-            "`forcegraph_memory_tool`; task and agent identity are automatic."
+            "`forcegraph_memory_tool` and coordinate through "
+            "`forcegraph_passport_tool`; task and agent identity are automatic."
         ),
     },
     "review-changes.md": {
@@ -652,7 +653,8 @@ _SKILLS: dict[str, dict[str, str]] = {
             "- Target: complete any review/debug/refactor task in ≤5 tool calls "
             "and ≤800 total output tokens.\n"
             "- For parallel-agent work, publish decisions and handoffs with "
-            "`forcegraph_memory_tool`; task and agent identity are automatic."
+            "`forcegraph_memory_tool` and coordinate through "
+            "`forcegraph_passport_tool`; task and agent identity are automatic."
         ),
     },
     "debug-issue.md": {
@@ -680,7 +682,8 @@ _SKILLS: dict[str, dict[str, str]] = {
             "- Target: complete any review/debug/refactor task in ≤5 tool calls "
             "and ≤800 total output tokens.\n"
             "- For parallel-agent work, publish decisions and handoffs with "
-            "`forcegraph_memory_tool`; task and agent identity are automatic."
+            "`forcegraph_memory_tool` and coordinate through "
+            "`forcegraph_passport_tool`; task and agent identity are automatic."
         ),
     },
     "refactor-safely.md": {
@@ -710,7 +713,8 @@ _SKILLS: dict[str, dict[str, str]] = {
             "- Target: complete any review/debug/refactor task in ≤5 tool calls "
             "and ≤800 total output tokens.\n"
             "- For parallel-agent work, publish decisions and handoffs with "
-            "`forcegraph_memory_tool`; task and agent identity are automatic."
+            "`forcegraph_memory_tool` and coordinate through "
+            "`forcegraph_passport_tool`; task and agent identity are automatic."
         ),
     },
 }

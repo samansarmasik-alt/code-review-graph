@@ -65,15 +65,16 @@ AI agent’ına da yaptırabilirsiniz:
 
 MCP aracını veya graf komutunu sizin seçmeniz gerekmez.
 
-### Neden yalnızca dört araç?
+### Neden yalnızca beş araç?
 
 Çok sayıda MCP aracını her oturumda modele göstermek araç şeması bağlamını
-büyütebilir. ForceGraph normal kullanımda yalnızca şunları gösterir:
+büyütebilir. ForceGraph normal kullanımda yalnızca beş agent aracını gösterir:
 
 | Araç | Ne yapar? |
 | --- | --- |
 | `forcegraph_context_tool` | Soruyu anlayıp doğru küçük bağlamı getirir |
 | `forcegraph_memory_tool` | Agent kararlarını ve handoff’ları paylaşır |
+| `forcegraph_passport_tool` | Ortak amaç, durum, sahip ve sonraki adımı taşır |
 | `detect_changes_tool` | Derin değişiklik/risk incelemesi yapar |
 | `build_or_update_graph_tool` | Eksik veya eski grafı onarır |
 
@@ -93,8 +94,14 @@ flowchart TD
     M --> G["ForceGraph bağlamı"]
 ```
 
-Bütün konuşmalar saklanmaz. Yalnızca kısa karar, bulgu, not ve handoff kayıtları
-paylaşılır. Normal bağlam çağrısı ilgili son kayıtları otomatik görür.
+Bütün konuşmalar saklanmaz. Karar, bulgu, not ve handoff kayıtları paylaşılır.
+Görev Pasaportu ayrıca ortak amacı, işi üstlenen agent’ı, mevcut durumu, kısa
+özeti ve sıradaki adımı taşır. Yeni agent tüm sohbeti okumadan devam edebilir.
+
+Uzun notlar reddedilmez ve yerelde tam saklanır. ForceGraph yalnızca modele
+gönderilen kısmı mevcut bağlam bütçesine göre küçültür. Limit alışılmadık olsa
+bile agent durdurulmaz; sonuç sayısı ve graf derinliği yumuşak şekilde optimize
+edilir.
 
 Görev kimliği sırası:
 
@@ -122,7 +129,7 @@ Farkımız, motoru agent uygulamalarında zahmetsiz bir bağlam geçidine çevir
 | Uzman graf araçlarını elle yönetmek | Daha uygun | Tam profilde mümkün |
 | Tek komut bağlantı | Seçenekler mevcut | Otomatik algılama + receipt |
 | Türkçe doğal görev | Minimal başlangıç | Türkçe/İngilizce router |
-| Küçük MCP yüzeyi | Filtrelenebilir | Varsayılan dört araç |
+| Küçük MCP yüzeyi | Filtrelenebilir | Varsayılan beş araç |
 | Çoklu terminal hafızası | Temel özellik değil | Yerleşik ve branch tabanlı |
 | Bilinmeyen istemci | Manuel MCP | Hazır taşınabilir manifest |
 | Güncellik | Hook/watch seçenekleri | Bağlantıda otomatik watch |
@@ -130,13 +137,30 @@ Farkımız, motoru agent uygulamalarında zahmetsiz bir bağlam geçidine çevir
 Kısaca: grafı elle ve ayrıntılı kontrol etmek için upstream; “repoya bağlan ve
 doğru bağlamı kendin seç” deneyimi için ForceGraph.
 
+### Görev Pasaportu örneği
+
+```json
+{
+  "goal": "Login timeout hatasını düzelt",
+  "status": "in_progress",
+  "owner_agent": "worker-2",
+  "summary": "Sorun Redis timeout yoluna daraltıldı",
+  "next_action": "Timeout testini ekle"
+}
+```
+
+Pasaport işlemleri `read`, `update`, `claim`, `complete` ve `handoff`
+olarak kullanılabilir. Geçersiz veya eksik bir işlem agent’ı durdurmaz; güvenli
+okuma/güncelleme davranışına düşer. Hafıza veya pasaport geçici olarak
+kullanılamazsa kod bağlamı yine döner.
+
 ### Token konusunda dürüst açıklama
 
 Upstream motor benchmark’ı bütün corpus karşılaştırmasında soru başına medyan
 yaklaşık **82×** daha küçük graf bağlamı bildirir
 ([metodoloji](docs/REPRODUCING.md)). Bu toplam sohbet maliyeti değildir.
 
-ForceGraph ayrıca araç yüzeyini dörde indirir ve ortak hafızayı sınırlar. Ancak
+ForceGraph ayrıca araç yüzeyini beşe indirir ve ortak hafızayı sınırlar. Ancak
 bu ek kazanç için henüz bağımsız v2.6 model benchmark’ı yayımlamadık; ölçmeden
 kesin yüzde söylemiyoruz.
 
@@ -199,7 +223,7 @@ Yerel durum:
 
 ForceGraph is a local-first context gateway built on the MIT-licensed
 `tirth8205/code-review-graph` engine. It adds one-command client detection,
-auto-watch, a four-tool compact MCP surface, Turkish/English task routing,
+auto-watch, a five-tool compact MCP surface, Turkish/English task routing,
 installation receipts, and bounded shared memory for parallel terminal agents.
 
 ```bash

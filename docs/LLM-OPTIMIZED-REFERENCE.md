@@ -4,8 +4,10 @@ AI coding agents: Read ONLY the exact `<section>` you need. Never load the whole
 
 <section name="usage">
 For ForceGraph connections, call `forcegraph_context_tool(task="...")` first.
-For parallel work, use `forcegraph_memory_tool` with a shared task_id to publish
-decisions and handoffs; normal context calls read recent task memory automatically.
+For parallel work, use `forcegraph_memory_tool` for decisions and handoffs,
+and `forcegraph_passport_tool` for the shared goal, owner, status, summary, and
+next action. Normal context calls read both automatically. Limits are soft
+optimization targets and must not block code work.
 It routes Turkish or English tasks to compact graph context. Use
 `detect_changes_tool` for a deeper risk review and only enable the full profile
 for specialist analysis.

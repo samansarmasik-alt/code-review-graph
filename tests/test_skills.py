@@ -182,6 +182,7 @@ class TestGenerateSkills:
         for subdir in skills_dir.iterdir():
             content = (subdir / "SKILL.md").read_text()
             assert "forcegraph_memory_tool" in content
+            assert "forcegraph_passport_tool" in content
             assert "detail_level" in content, (
                 f"{subdir.name} missing detail_level reference"
             )

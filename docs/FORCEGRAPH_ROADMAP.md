@@ -18,8 +18,10 @@ tests, documentation, and compatibility checks are complete.
 
 - [ ] Define a versioned JSON schema for targeted AI context bundles
 - [ ] Include relevant symbols, callers, callees, tests, flows, and risk evidence
-- [ ] Enforce configurable response token and file budgets
+- [x] Optimize response budgets softly without blocking agent work
+- [ ] Add model-specific exact token accounting and file budgets
 - [ ] Add deterministic receipts explaining why every context item was selected
+- [x] Add Task Passports for shared goal, ownership, status, summary, and next action
 - [x] Add bounded local shared memory and handoffs for concurrent terminal agents
 - [x] Auto-resolve shared-memory task and agent identity without user commands
 - [ ] Add secret and ignored-file filtering before bundle generation

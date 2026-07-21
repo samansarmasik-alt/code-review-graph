@@ -3,10 +3,13 @@
 from concurrent.futures import ThreadPoolExecutor
 
 from code_review_graph.agent_memory import (
+    ensure_task_passport,
     publish_agent_memory,
     read_agent_memory,
+    read_task_passport,
     resolve_agent_id,
     resolve_task_id,
+    update_task_passport,
 )
 
 
@@ -97,3 +100,63 @@ def test_concurrent_terminal_writes_are_visible(tmp_path):
     assert {entry["content"] for entry in result["entries"]} == {
         f"finding-{index}" for index in range(8)
     }
+
+
+
+def test_large_memory_is_stored_but_read_is_optimized(tmp_path):
+    content = "x" * 20_000
+    published = publish_agent_memory(
+        tmp_path,
+        agent_id="writer",
+        task_id="large",
+        content=content,
+    )
+    result = read_agent_memory(tmp_path, task_id="large", max_chars=500)
+    assert published["stored_chars"] == 20_000
+    assert result["used_chars"] <= 500
+    assert result["truncated"] is True
+
+
+def test_invalid_soft_limits_fall_back_without_error(tmp_path):
+    publish_agent_memory(tmp_path, agent_id="writer", content="note")
+    result = read_agent_memory(tmp_path, limit=-999, max_chars=-5)
+    assert result["status"] == "ok"
+    assert result["optimized_limit"] == 1
+    assert result["max_chars"] == 200
+
+
+def test_task_passport_preserves_goal_and_supports_handoff(tmp_path):
+    created = ensure_task_passport(
+        tmp_path,
+        task_id="branch:feature",
+        goal="Fix login timeout",
+    )
+    assert created["passport"]["goal"] == "Fix login timeout"
+
+    claimed = update_task_passport(
+        tmp_path,
+        task_id="branch:feature",
+        agent_id="worker-1",
+        status="in_progress",
+        summary="Redis path isolated",
+        next_action="Add timeout test",
+        claim=True,
+    )
+    assert claimed["passport"]["owner_agent"] == "worker-1"
+    assert claimed["passport"]["next_action"] == "Add timeout test"
+
+    reread = read_task_passport(tmp_path, task_id="branch:feature")
+    assert reread["passport"]["goal"] == "Fix login timeout"
+    assert reread["passport"]["summary"] == "Redis path isolated"
+
+
+def test_passport_redacts_secrets_without_rejecting_long_text(tmp_path):
+    summary = "API_KEY=super-secret " + ("detail " * 1000)
+    result = update_task_passport(
+        tmp_path,
+        task_id="secure",
+        agent_id="worker",
+        summary=summary,
+    )
+    assert "super-secret" not in result["passport"]["summary"]
+    assert "[REDACTED]" in result["passport"]["summary"]
