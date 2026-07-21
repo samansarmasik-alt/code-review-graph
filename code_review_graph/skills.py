@@ -622,7 +622,8 @@ _SKILLS: dict[str, dict[str, str]] = {
             "- Target: complete any review/debug/refactor task in ≤5 tool calls "
             "and ≤800 total output tokens.\n"
             "- For parallel-agent work, publish decisions and handoffs with "
-            "`forcegraph_memory_tool` and coordinate through `forcegraph_passport_tool`; task and agent identity are automatic."
+            "`forcegraph_memory_tool` and coordinate through "
+            "`forcegraph_passport_tool`; task and agent identity are automatic."
         ),
     },
     "review-changes.md": {
@@ -652,7 +653,8 @@ _SKILLS: dict[str, dict[str, str]] = {
             "- Target: complete any review/debug/refactor task in ≤5 tool calls "
             "and ≤800 total output tokens.\n"
             "- For parallel-agent work, publish decisions and handoffs with "
-            "`forcegraph_memory_tool` and coordinate through `forcegraph_passport_tool`; task and agent identity are automatic."
+            "`forcegraph_memory_tool` and coordinate through "
+            "`forcegraph_passport_tool`; task and agent identity are automatic."
         ),
     },
     "debug-issue.md": {
@@ -680,7 +682,8 @@ _SKILLS: dict[str, dict[str, str]] = {
             "- Target: complete any review/debug/refactor task in ≤5 tool calls "
             "and ≤800 total output tokens.\n"
             "- For parallel-agent work, publish decisions and handoffs with "
-            "`forcegraph_memory_tool` and coordinate through `forcegraph_passport_tool`; task and agent identity are automatic."
+            "`forcegraph_memory_tool` and coordinate through "
+            "`forcegraph_passport_tool`; task and agent identity are automatic."
         ),
     },
     "refactor-safely.md": {
@@ -710,7 +713,8 @@ _SKILLS: dict[str, dict[str, str]] = {
             "- Target: complete any review/debug/refactor task in ≤5 tool calls "
             "and ≤800 total output tokens.\n"
             "- For parallel-agent work, publish decisions and handoffs with "
-            "`forcegraph_memory_tool` and coordinate through `forcegraph_passport_tool`; task and agent identity are automatic."
+            "`forcegraph_memory_tool` and coordinate through "
+            "`forcegraph_passport_tool`; task and agent identity are automatic."
         ),
     },
 }
