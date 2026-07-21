@@ -161,7 +161,7 @@ yaklaşık **82×** daha küçük graf bağlamı bildirir
 ([metodoloji](docs/REPRODUCING.md)). Bu toplam sohbet maliyeti değildir.
 
 ForceGraph ayrıca araç yüzeyini beşe indirir ve ortak hafızayı sınırlar. Ancak
-bu ek kazanç için henüz bağımsız v2.6 model benchmark’ı yayımlamadık; ölçmeden
+bu ek kazanç için henüz bağımsız v2.7 model benchmark’ı yayımlamadık; ölçmeden
 kesin yüzde söylemiyoruz.
 
 Azalabilenler:
