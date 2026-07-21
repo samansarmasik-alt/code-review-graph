@@ -96,9 +96,12 @@ Tell the user:
 3. The receipt location.
 4. Whether their AI tool must be restarted to load the new MCP configuration.
 
-After restart, use ForceGraph MCP tools before broad file scanning. Start with
-minimal context or architecture inspection, then query impact radius and tests
-before editing code.
+After restart, call `forcegraph_context_tool` with the user's natural-language
+task before broad file scanning. For parallel terminal agents, assign a shared
+task_id and exchange bounded decisions or handoffs through
+`forcegraph_memory_tool`. It selects compact search, architecture, impact,
+relationship, or review context automatically. Use `detect_changes_tool` only
+when a deeper risk review is needed.
 
 ## Safety rules
 

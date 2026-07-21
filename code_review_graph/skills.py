@@ -281,7 +281,7 @@ def _build_server_entry(
 ) -> dict[str, Any]:
     """Build the MCP server entry for a platform."""
     command, args = _detect_serve_command()
-    # Connected projects use the compact nine-tool surface by default.
+    # Connected projects use the compact four-tool gateway by default.
     # Manual `serve` keeps the backwards-compatible full surface.
     args = [*args, "--tool-profile", "compact"]
     if key == "opencode":
@@ -615,12 +615,14 @@ _SKILLS: dict[str, dict[str, str]] = {
             "- Use `children_of` on a file to see all its functions and classes.\n"
             "- Use `find_large_functions` to identify complex code.\n\n"
             "## Token Efficiency Rules\n"
-            '- ALWAYS start with `get_minimal_context(task="<your task>")` '
+            '- ALWAYS start with `forcegraph_context_tool(task="<your task>")` '
             "before any other graph tool.\n"
             '- Use `detail_level="minimal"` on all calls. Only escalate to '
             '"standard" when minimal is insufficient.\n'
             "- Target: complete any review/debug/refactor task in ≤5 tool calls "
-            "and ≤800 total output tokens."
+            "and ≤800 total output tokens.\n"
+            "- For parallel-agent work, publish decisions and handoffs with "
+            "`forcegraph_memory_tool` using a shared task_id."
         ),
     },
     "review-changes.md": {
@@ -643,12 +645,14 @@ _SKILLS: dict[str, dict[str, str]] = {
             "- Suggested improvements\n"
             "- Overall merge recommendation\n\n"
             "## Token Efficiency Rules\n"
-            '- ALWAYS start with `get_minimal_context(task="<your task>")` '
+            '- ALWAYS start with `forcegraph_context_tool(task="<your task>")` '
             "before any other graph tool.\n"
             '- Use `detail_level="minimal"` on all calls. Only escalate to '
             '"standard" when minimal is insufficient.\n'
             "- Target: complete any review/debug/refactor task in ≤5 tool calls "
-            "and ≤800 total output tokens."
+            "and ≤800 total output tokens.\n"
+            "- For parallel-agent work, publish decisions and handoffs with "
+            "`forcegraph_memory_tool` using a shared task_id."
         ),
     },
     "debug-issue.md": {
@@ -669,12 +673,14 @@ _SKILLS: dict[str, dict[str, str]] = {
             "- Look at affected flows to find the entry point that triggers the bug.\n"
             "- Recent changes are the most common source of new issues.\n\n"
             "## Token Efficiency Rules\n"
-            '- ALWAYS start with `get_minimal_context(task="<your task>")` '
+            '- ALWAYS start with `forcegraph_context_tool(task="<your task>")` '
             "before any other graph tool.\n"
             '- Use `detail_level="minimal"` on all calls. Only escalate to '
             '"standard" when minimal is insufficient.\n'
             "- Target: complete any review/debug/refactor task in ≤5 tool calls "
-            "and ≤800 total output tokens."
+            "and ≤800 total output tokens.\n"
+            "- For parallel-agent work, publish decisions and handoffs with "
+            "`forcegraph_memory_tool` using a shared task_id."
         ),
     },
     "refactor-safely.md": {
@@ -697,12 +703,14 @@ _SKILLS: dict[str, dict[str, str]] = {
             "- Use `get_affected_flows_tool` to ensure no critical paths are broken.\n"
             "- Run `find_large_functions` to identify decomposition targets.\n\n"
             "## Token Efficiency Rules\n"
-            '- ALWAYS start with `get_minimal_context(task="<your task>")` '
+            '- ALWAYS start with `forcegraph_context_tool(task="<your task>")` '
             "before any other graph tool.\n"
             '- Use `detail_level="minimal"` on all calls. Only escalate to '
             '"standard" when minimal is insufficient.\n'
             "- Target: complete any review/debug/refactor task in ≤5 tool calls "
-            "and ≤800 total output tokens."
+            "and ≤800 total output tokens.\n"
+            "- For parallel-agent work, publish decisions and handoffs with "
+            "`forcegraph_memory_tool` using a shared task_id."
         ),
     },
 }

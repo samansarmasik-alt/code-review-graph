@@ -23,6 +23,21 @@ Review a PR or branch diff.
 
 ## MCP Tools
 
+## ForceGraph shared agent memory
+
+`forcegraph_memory_tool` lets concurrent terminal agents publish and read local
+notes, findings, decisions, and handoffs. Use a shared `task_id`; records live
+in a WAL-mode SQLite database, expire automatically, and are returned with a
+bounded character budget.
+
+## ForceGraph context gateway
+
+`forcegraph_context_tool(task, intent="auto", token_budget=800)` is the default
+entry point for connected agents. It detects Turkish and English task intent,
+forces minimal detail, and maps the budget to bounded result counts and graph
+depth. Advanced tools below remain available with `--tool-profile full`.
+
+
 ### Core Tools
 
 #### `build_or_update_graph_tool`

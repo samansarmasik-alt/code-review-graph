@@ -167,13 +167,13 @@ class TestGenerateSkills:
         assert result.is_dir()
         assert len(list(result.iterdir())) == 4
 
-    def test_skill_content_includes_get_minimal_context(self, tmp_path):
-        """Every skill template must reference get_minimal_context."""
+    def test_skill_content_includes_forcegraph_context_tool(self, tmp_path):
+        """Every skill template must reference forcegraph_context_tool."""
         skills_dir = generate_skills(tmp_path)
         for subdir in skills_dir.iterdir():
             content = (subdir / "SKILL.md").read_text()
-            assert "get_minimal_context" in content, (
-                f"{subdir.name} missing get_minimal_context reference"
+            assert "forcegraph_context_tool" in content, (
+                f"{subdir.name} missing forcegraph_context_tool reference"
             )
 
     def test_skill_content_includes_detail_level(self, tmp_path):
@@ -181,6 +181,7 @@ class TestGenerateSkills:
         skills_dir = generate_skills(tmp_path)
         for subdir in skills_dir.iterdir():
             content = (subdir / "SKILL.md").read_text()
+            assert "forcegraph_memory_tool" in content
             assert "detail_level" in content, (
                 f"{subdir.name} missing detail_level reference"
             )
@@ -848,7 +849,7 @@ class TestCodeBuddyPlatform:
             assert content.startswith("---\n")
             assert f"name: {skill_dir.name}\n" in content
             assert "description:" in content
-            assert "get_minimal_context" in content
+            assert "forcegraph_context_tool" in content
 
     def test_project_hooks_preserve_user_settings_and_resolve_repo_at_runtime(
         self, tmp_path

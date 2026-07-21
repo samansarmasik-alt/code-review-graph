@@ -4,6 +4,24 @@
 
 ### ForceGraph additions
 
+- Added local shared agent memory for concurrent terminal agents, backed by a
+  separate SQLite WAL database with task isolation, TTL cleanup, bounded reads,
+  and common-secret redaction.
+- Added `forcegraph_memory_tool` for notes, findings, decisions, and explicit
+  handoffs; normal context-gateway calls automatically include recent task memory.
+- Expanded the compact surface to four agent-facing tools while keeping the
+  specialist full profile available.
+
+- Added `forcegraph_context_tool`, a single bilingual task gateway that routes
+  Turkish and English coding requests to compact orientation, search, impact,
+  architecture, relationship, or review context.
+- Reduced the default connected-agent surface from nine tools to three:
+  context gateway, deep change review, and graph recovery/update.
+- Added budget-aware result limits and traversal depth, always using minimal
+  detail in the gateway.
+- Documented when ForceGraph is preferable to upstream and when the upstream or
+  full expert surface remains the better choice.
+
 - Added a named `compact` MCP tool profile containing the nine high-value tools
   used by normal coding-agent workflows. One-command connections select it
   automatically, reducing recurring tool-schema overhead; `full` remains

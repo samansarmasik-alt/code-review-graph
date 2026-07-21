@@ -3,6 +3,13 @@
 AI coding agents: Read ONLY the exact `<section>` you need. Never load the whole file.
 
 <section name="usage">
+For ForceGraph connections, call `forcegraph_context_tool(task="...")` first.
+For parallel work, use `forcegraph_memory_tool` with a shared task_id to publish
+decisions and handoffs; normal context calls read recent task memory automatically.
+It routes Turkish or English tasks to compact graph context. Use
+`detect_changes_tool` for a deeper risk review and only enable the full profile
+for specialist analysis.
+
 Quick install: pip install code-review-graph
 Then: code-review-graph install && code-review-graph build
 First run: /code-review-graph:build-graph

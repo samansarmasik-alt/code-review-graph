@@ -31,6 +31,65 @@ def _isolate_crg_tools_env(monkeypatch):
     monkeypatch.delenv("CRG_TOOL_PROFILE", raising=False)
 
 
+class TestContextIntentRouting:
+    def test_defaults_to_orientation(self):
+        assert crg_main._infer_context_intent("Explain this project") == "orient"
+
+    @pytest.mark.parametrize(
+        "task, expected",
+        [
+            ("Bu değişikliği incele", "review"),
+            ("Mimari yapıyı açıkla", "architecture"),
+            ("Bu değişikliğin etkisi nedir?", "impact"),
+            ("Bu fonksiyonu kim çağırıyor?", "relation"),
+            ("Giriş hatasını bul", "search"),
+            ("Review the current diff", "review"),
+        ],
+    )
+    def test_bilingual_auto_detection(self, task, expected):
+        assert crg_main._infer_context_intent(task) == expected
+
+    def test_explicit_intent_wins(self):
+        assert crg_main._infer_context_intent("review this", "search") == "search"
+
+    def test_invalid_intent_fails_clearly(self):
+        with pytest.raises(ValueError, match="unknown context intent"):
+            crg_main._infer_context_intent("task", "magic")
+
+    def test_gateway_converts_budget_to_bounded_search(self, monkeypatch):
+        captured = {}
+
+        def fake_search(**kwargs):
+            captured.update(kwargs)
+            return {"status": "ok", "results": []}
+
+        monkeypatch.setattr(crg_main, "semantic_search_nodes", fake_search)
+        monkeypatch.setattr(
+            crg_main,
+            "with_provenance",
+            lambda payload, root: dict(payload),
+        )
+        tool = getattr(crg_main.forcegraph_context_tool, "fn", None)
+        gateway = tool or crg_main.forcegraph_context_tool
+
+        result = gateway(
+            task="login hatasını bul",
+            token_budget=500,
+            repo_root="/repo",
+        )
+
+        assert captured["detail_level"] == "minimal"
+        assert captured["limit"] == 5
+        assert result["forcegraph_gateway"]["intent"] == "search"
+        assert result["forcegraph_gateway"]["max_depth"] == 1
+
+    def test_gateway_rejects_unbounded_budget(self):
+        tool = getattr(crg_main.forcegraph_context_tool, "fn", None)
+        gateway = tool or crg_main.forcegraph_context_tool
+        with pytest.raises(ValueError, match="between 200 and 4000"):
+            gateway(task="anything", token_budget=10)
+
+
 class TestResolveRepoRoot:
     """Precedence rules for _resolve_repo_root (see #222 follow-up)."""
 
@@ -462,7 +521,7 @@ class TestApplyToolFilter:
         crg_main._apply_tool_filter(tool_profile="compact")
         remaining = await self._tool_names()
         assert remaining == set(crg_main.COMPACT_TOOL_NAMES)
-        assert len(remaining) == 9
+        assert len(remaining) == 4
 
     def test_unknown_profile_is_rejected(self):
         with pytest.raises(ValueError, match="unknown tool profile"):
