@@ -23,7 +23,8 @@ connection, the graph follows file changes for as long as the AI client is
 running; users do not need to manage build, update, or watch commands.
 
 It also starts with `--tool-profile compact`. The agent sees only `forcegraph_context_tool`, `forcegraph_memory_tool`,
-`detect_changes_tool`, and `build_or_update_graph_tool`. The gateway routes Turkish or English tasks to
+`forcegraph_passport_tool`, `detect_changes_tool`, and
+`build_or_update_graph_tool`. The gateway routes Turkish or English tasks to
 orientation, search, relationship, impact, architecture, or compact review
 context. Shared-memory identity is zero-config: ForceGraph uses explicit IDs,
 environment variables, then the current git branch. This avoids repeatedly

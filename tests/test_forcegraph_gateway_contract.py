@@ -7,6 +7,7 @@ def test_compact_profile_is_intentionally_tiny():
     assert crg_main.COMPACT_TOOL_NAMES == (
         "forcegraph_context_tool",
         "forcegraph_memory_tool",
+        "forcegraph_passport_tool",
         "detect_changes_tool",
         "build_or_update_graph_tool",
     )

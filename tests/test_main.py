@@ -52,9 +52,8 @@ class TestContextIntentRouting:
     def test_explicit_intent_wins(self):
         assert crg_main._infer_context_intent("review this", "search") == "search"
 
-    def test_invalid_intent_fails_clearly(self):
-        with pytest.raises(ValueError, match="unknown context intent"):
-            crg_main._infer_context_intent("task", "magic")
+    def test_invalid_intent_falls_back_to_auto(self):
+        assert crg_main._infer_context_intent("mimariyi açıkla", "magic") == "architecture"
 
     def test_gateway_converts_budget_to_bounded_search(self, monkeypatch):
         captured = {}
@@ -76,6 +75,16 @@ class TestContextIntentRouting:
         )
         monkeypatch.setattr(crg_main, "resolve_agent_id", lambda value: "agent-1")
         monkeypatch.setattr(crg_main, "resolve_task_id", lambda root, value: "branch:test")
+        monkeypatch.setattr(
+            crg_main,
+            "ensure_task_passport",
+            lambda *args, **kwargs: {"status": "ok"},
+        )
+        monkeypatch.setattr(
+            crg_main,
+            "read_task_passport",
+            lambda *args, **kwargs: {"status": "ok", "passport": {}},
+        )
         tool = getattr(crg_main.forcegraph_context_tool, "fn", None)
         gateway = tool or crg_main.forcegraph_context_tool
 
@@ -90,11 +99,38 @@ class TestContextIntentRouting:
         assert result["forcegraph_gateway"]["intent"] == "search"
         assert result["forcegraph_gateway"]["max_depth"] == 1
 
-    def test_gateway_rejects_unbounded_budget(self):
+    def test_gateway_optimizes_unusual_budget_without_error(self, monkeypatch):
+        monkeypatch.setattr(
+            crg_main,
+            "get_minimal_context",
+            lambda **kwargs: {"status": "ok"},
+        )
+        monkeypatch.setattr(
+            crg_main,
+            "with_provenance",
+            lambda payload, root: dict(payload),
+        )
+        monkeypatch.setattr(crg_main, "resolve_agent_id", lambda value: "agent-1")
+        monkeypatch.setattr(crg_main, "resolve_task_id", lambda root, value: "branch:test")
+        monkeypatch.setattr(
+            crg_main,
+            "ensure_task_passport",
+            lambda *args, **kwargs: {"status": "ok"},
+        )
+        monkeypatch.setattr(
+            crg_main,
+            "read_task_passport",
+            lambda *args, **kwargs: {"status": "ok", "passport": {}},
+        )
+        monkeypatch.setattr(
+            crg_main,
+            "read_agent_memory",
+            lambda *args, **kwargs: {"entries": []},
+        )
         tool = getattr(crg_main.forcegraph_context_tool, "fn", None)
         gateway = tool or crg_main.forcegraph_context_tool
-        with pytest.raises(ValueError, match="between 200 and 4000"):
-            gateway(task="anything", token_budget=10)
+        result = gateway(task="anything", token_budget=-1)
+        assert result["forcegraph_gateway"]["optimized_budget"]["requested_tokens"] == 800
 
 
 class TestResolveRepoRoot:
@@ -533,3 +569,29 @@ class TestApplyToolFilter:
     def test_unknown_profile_is_rejected(self):
         with pytest.raises(ValueError, match="unknown tool profile"):
             crg_main._apply_tool_filter(tool_profile="tiny")
+
+
+
+class TestPassportTool:
+    def test_claim_updates_shared_owner(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(crg_main, "_default_repo_root", str(tmp_path))
+        tool = getattr(crg_main.forcegraph_passport_tool, "fn", None)
+        passport = tool or crg_main.forcegraph_passport_tool
+        result = passport(
+            action="claim",
+            goal="Fix login",
+            agent_id="worker-1",
+            task_id="issue-1",
+        )
+        assert result["status"] == "ok"
+        assert result["passport"]["owner_agent"] == "worker-1"
+        assert result["passport"]["status"] == "in_progress"
+
+    def test_unknown_action_falls_back_without_error(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(crg_main, "_default_repo_root", str(tmp_path))
+        tool = getattr(crg_main.forcegraph_passport_tool, "fn", None)
+        passport = tool or crg_main.forcegraph_passport_tool
+        result = passport(action="surprise", summary="Useful finding")
+        assert result["status"] == "ok"
+        assert result["action"] == "update"
+        assert result["action_fallback"] is True

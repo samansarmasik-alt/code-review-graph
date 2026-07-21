@@ -97,8 +97,8 @@ Tell the user:
 4. Whether their AI tool must be restarted to load the new MCP configuration.
 
 After restart, call `forcegraph_context_tool` with the user's natural-language
-task before broad file scanning. For parallel terminal agents, use `forcegraph_memory_tool` for bounded
-decisions or handoffs. Do not ask for IDs by default; ForceGraph derives them
+task before broad file scanning. For parallel terminal agents, use `forcegraph_memory_tool` for decisions or
+handoffs and `forcegraph_passport_tool` for shared goal/status/ownership. Do not ask for IDs by default; ForceGraph derives them
 from session environment information and the current git branch. It selects compact search, architecture, impact,
 relationship, or review context automatically. Use `detect_changes_tool` only
 when a deeper risk review is needed.

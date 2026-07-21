@@ -100,6 +100,20 @@ def _connect(repo_root: Path) -> sqlite3.Connection:
         "CREATE INDEX IF NOT EXISTS idx_agent_memory_task "
         "ON agent_memory(task_id, created_at DESC)"
     )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS task_passports (
+            task_id TEXT PRIMARY KEY,
+            goal TEXT,
+            status TEXT NOT NULL DEFAULT 'active',
+            owner_agent TEXT,
+            summary TEXT,
+            next_action TEXT,
+            created_at REAL NOT NULL,
+            updated_at REAL NOT NULL
+        )
+        """
+    )
     connection.commit()
     return connection
 
@@ -114,25 +128,20 @@ def publish_agent_memory(
     ttl_hours: int = 72,
 ) -> dict[str, Any]:
     """Publish one bounded, expiring memory entry."""
-    normalized_agent = agent_id.strip()
-    normalized_task = task_id.strip() if task_id else None
-    normalized_kind = kind.strip().lower()
-    if not normalized_agent or len(normalized_agent) > 80:
-        raise ValueError("agent_id must contain 1 to 80 characters")
-    if normalized_task is not None and len(normalized_task) > 120:
-        raise ValueError("task_id must be at most 120 characters")
-    if normalized_kind not in _ALLOWED_KINDS:
-        raise ValueError("kind must be note, decision, finding, or handoff")
-    if not 1 <= ttl_hours <= 720:
-        raise ValueError("ttl_hours must be between 1 and 720")
+    normalized_agent = (agent_id.strip() or f"agent-{os.getpid()}")[:80]
+    normalized_task = task_id.strip()[:120] if task_id else None
+    requested_kind = kind.strip().lower()
+    normalized_kind = requested_kind if requested_kind in _ALLOWED_KINDS else "note"
+    try:
+        optimized_ttl = max(1, min(int(ttl_hours), 8760))
+    except (TypeError, ValueError):
+        optimized_ttl = 72
     normalized_content = _redact_memory_content(content.strip())
     if not normalized_content:
         raise ValueError("content must not be empty")
-    if len(normalized_content) > 4000:
-        raise ValueError("content must be at most 4000 characters")
 
     now = time.time()
-    expires_at = now + ttl_hours * 3600
+    expires_at = now + optimized_ttl * 3600
     connection = _connect(repo_root)
     try:
         with connection:
@@ -164,6 +173,9 @@ def publish_agent_memory(
         "created_at": now,
         "expires_at": expires_at,
         "redacted": normalized_content != content.strip(),
+        "stored_chars": len(normalized_content),
+        "kind_fallback": normalized_kind != requested_kind,
+        "optimized_ttl_hours": optimized_ttl,
     }
 
 
@@ -174,11 +186,15 @@ def read_agent_memory(
     limit: int = 12,
     max_chars: int = 2400,
 ) -> dict[str, Any]:
-    """Read recent entries with task filtering and a strict character budget."""
-    if not 1 <= limit <= 50:
-        raise ValueError("limit must be between 1 and 50")
-    if not 200 <= max_chars <= 8000:
-        raise ValueError("max_chars must be between 200 and 8000")
+    """Read recent entries using a soft, optimized model-context budget."""
+    try:
+        optimized_limit = max(1, min(int(limit), 200))
+    except (TypeError, ValueError):
+        optimized_limit = 12
+    try:
+        optimized_max_chars = max(200, min(int(max_chars), 100_000))
+    except (TypeError, ValueError):
+        optimized_max_chars = 2400
 
     now = time.time()
     normalized_task = task_id.strip() if task_id else None
@@ -195,7 +211,7 @@ def read_agent_memory(
                     ORDER BY created_at DESC, id DESC
                     LIMIT ?
                     """,
-                    (now, limit),
+                    (now, optimized_limit),
                 ).fetchall()
             else:
                 rows = connection.execute(
@@ -206,7 +222,7 @@ def read_agent_memory(
                     ORDER BY created_at DESC, id DESC
                     LIMIT ?
                     """,
-                    (now, normalized_task, limit),
+                    (now, normalized_task, optimized_limit),
                 ).fetchall()
     finally:
         connection.close()
@@ -217,13 +233,16 @@ def read_agent_memory(
     for row in rows:
         item = dict(row)
         item_chars = len(item["content"]) + len(item["agent_id"]) + len(item["kind"]) + 48
-        if selected and used_chars + item_chars > max_chars:
+        if selected and used_chars + item_chars > optimized_max_chars:
             truncated = True
             break
-        if item_chars > max_chars:
-            available = max(1, max_chars - len(item["agent_id"]) - len(item["kind"]) - 49)
+        if item_chars > optimized_max_chars:
+            available = max(
+                1,
+                optimized_max_chars - len(item["agent_id"]) - len(item["kind"]) - 49,
+            )
             item["content"] = item["content"][:available] + "…"
-            item_chars = max_chars
+            item_chars = optimized_max_chars
             truncated = True
         selected.append(item)
         used_chars += item_chars
@@ -236,6 +255,148 @@ def read_agent_memory(
         "entry_count": len(selected),
         "truncated": truncated or len(rows) > len(selected),
         "used_chars": used_chars,
-        "max_chars": max_chars,
+        "max_chars": optimized_max_chars,
+        "requested_limit": limit,
+        "optimized_limit": optimized_limit,
+        "local_only": True,
+    }
+
+
+def ensure_task_passport(
+    repo_root: Path,
+    *,
+    task_id: str,
+    goal: str,
+) -> dict[str, Any]:
+    """Create a task passport once without overwriting later agent decisions."""
+    normalized_task = (task_id.strip() or "workspace")[:120]
+    normalized_goal = _redact_memory_content(goal.strip())
+    now = time.time()
+    connection = _connect(repo_root)
+    try:
+        with connection:
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO task_passports
+                    (task_id, goal, status, created_at, updated_at)
+                VALUES (?, ?, 'active', ?, ?)
+                """,
+                (normalized_task, normalized_goal, now, now),
+            )
+    finally:
+        connection.close()
+    return read_task_passport(repo_root, task_id=normalized_task)
+
+
+def update_task_passport(
+    repo_root: Path,
+    *,
+    task_id: str,
+    agent_id: str,
+    goal: str | None = None,
+    status: str | None = None,
+    summary: str | None = None,
+    next_action: str | None = None,
+    claim: bool = False,
+) -> dict[str, Any]:
+    """Update only supplied passport fields; unknown statuses remain allowed."""
+    normalized_task = (task_id.strip() or "workspace")[:120]
+    normalized_agent = (agent_id.strip() or f"agent-{os.getpid()}")[:80]
+    now = time.time()
+
+    def clean(value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _redact_memory_content(value.strip())
+
+    normalized_status = clean(status)
+    owner = normalized_agent if claim else None
+    connection = _connect(repo_root)
+    try:
+        with connection:
+            connection.execute(
+                """
+                INSERT INTO task_passports
+                    (task_id, goal, status, owner_agent, summary, next_action,
+                     created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(task_id) DO UPDATE SET
+                    goal = COALESCE(excluded.goal, task_passports.goal),
+                    status = COALESCE(excluded.status, task_passports.status),
+                    owner_agent = COALESCE(excluded.owner_agent, task_passports.owner_agent),
+                    summary = COALESCE(excluded.summary, task_passports.summary),
+                    next_action = COALESCE(excluded.next_action, task_passports.next_action),
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    normalized_task,
+                    clean(goal),
+                    normalized_status or "active",
+                    owner,
+                    clean(summary),
+                    clean(next_action),
+                    now,
+                    now,
+                ),
+            )
+    finally:
+        connection.close()
+    return read_task_passport(repo_root, task_id=normalized_task)
+
+
+def read_task_passport(
+    repo_root: Path,
+    *,
+    task_id: str,
+    max_chars: int = 2400,
+) -> dict[str, Any]:
+    """Read one passport and optimize text fields to the requested soft budget."""
+    normalized_task = (task_id.strip() or "workspace")[:120]
+    try:
+        optimized_max_chars = max(400, min(int(max_chars), 100_000))
+    except (TypeError, ValueError):
+        optimized_max_chars = 2400
+
+    connection = _connect(repo_root)
+    try:
+        row = connection.execute(
+            """
+            SELECT task_id, goal, status, owner_agent, summary, next_action,
+                   created_at, updated_at
+            FROM task_passports
+            WHERE task_id = ?
+            """,
+            (normalized_task,),
+        ).fetchone()
+    finally:
+        connection.close()
+
+    if row is None:
+        return {
+            "status": "missing",
+            "task_id": normalized_task,
+            "passport": None,
+            "local_only": True,
+        }
+
+    passport = dict(row)
+    remaining = optimized_max_chars
+    truncated_fields: list[str] = []
+    for field in ("goal", "summary", "next_action"):
+        value = passport.get(field)
+        if not value:
+            continue
+        allowance = max(80, remaining)
+        if len(value) > allowance:
+            passport[field] = value[: max(1, allowance - 1)] + "…"
+            truncated_fields.append(field)
+        remaining = max(0, remaining - len(passport[field]))
+
+    return {
+        "status": "ok",
+        "task_id": normalized_task,
+        "passport": passport,
+        "truncated_fields": truncated_fields,
+        "optimized_max_chars": optimized_max_chars,
         "local_only": True,
     }

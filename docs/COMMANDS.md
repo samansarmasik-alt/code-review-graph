@@ -23,6 +23,13 @@ Review a PR or branch diff.
 
 ## MCP Tools
 
+## ForceGraph task passport
+
+`forcegraph_passport_tool` shares the task goal, status, owner, summary, and
+next action. It supports read, update, claim, complete, and handoff actions.
+Unknown actions fall back safely, and context calls include the passport
+automatically.
+
 ## ForceGraph shared agent memory
 
 `forcegraph_memory_tool` lets concurrent terminal agents publish and read local

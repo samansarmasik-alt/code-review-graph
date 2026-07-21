@@ -19,10 +19,13 @@ from fastmcp import FastMCP
 
 from . import incremental as _incremental
 from .agent_memory import (
+    ensure_task_passport,
     publish_agent_memory,
     read_agent_memory,
+    read_task_passport,
     resolve_agent_id,
     resolve_task_id,
+    update_task_passport,
 )
 from .graph import GraphStore
 from .incremental import find_project_root, get_db_path, start_watch_thread
@@ -128,10 +131,7 @@ def _infer_context_intent(task: str, requested: str = "auto") -> str:
     valid = {"auto", "orient", *_CONTEXT_INTENT_KEYWORDS}
     normalized_requested = requested.strip().lower()
     if normalized_requested not in valid:
-        choices = ", ".join(sorted(valid))
-        raise ValueError(
-            f"unknown context intent {requested!r}; choose one of: {choices}"
-        )
+        normalized_requested = "auto"
     if normalized_requested != "auto":
         return normalized_requested
 
@@ -140,6 +140,35 @@ def _infer_context_intent(task: str, requested: str = "auto") -> str:
         if any(keyword in normalized_task for keyword in _CONTEXT_INTENT_KEYWORDS[intent]):
             return intent
     return "orient"
+
+
+def _optimize_context_budget(requested: object) -> dict[str, int | bool]:
+    """Convert any budget-like input into safe query parameters without failing."""
+    try:
+        requested_tokens = int(requested)
+    except (TypeError, ValueError):
+        requested_tokens = 800
+    if requested_tokens <= 0:
+        requested_tokens = 800
+    result_limit = max(3, min(100, requested_tokens // 100))
+    if requested_tokens < 600:
+        max_depth = 1
+    elif requested_tokens < 2000:
+        max_depth = 2
+    elif requested_tokens < 8000:
+        max_depth = 3
+    else:
+        max_depth = 4
+    memory_chars = max(400, min(20_000, requested_tokens * 2))
+    passport_chars = max(400, min(20_000, requested_tokens))
+    return {
+        "requested_tokens": requested_tokens,
+        "result_limit": result_limit,
+        "max_depth": max_depth,
+        "memory_chars": memory_chars,
+        "passport_chars": passport_chars,
+        "optimized": True,
+    }
 
 
 @mcp.tool()
@@ -167,53 +196,63 @@ def forcegraph_context_tool(
     For relation queries, set target and optionally relation (for example
     callers_of, callees_of, imports_of, importers_of, or tests_for).
     """
-    if not 200 <= token_budget <= 4000:
-        raise ValueError("token_budget must be between 200 and 4000")
-
+    budget = _optimize_context_budget(token_budget)
     root = _resolve_repo_root(repo_root)
     selected = _infer_context_intent(task, intent)
-    result_limit = max(3, min(20, token_budget // 100))
-    max_depth = 1 if token_budget < 600 else 2
+    result_limit = int(budget["result_limit"])
+    max_depth = int(budget["max_depth"])
+    context_fallback = None
 
-    if selected == "search":
-        payload = semantic_search_nodes(
-            query=target or task,
-            limit=result_limit,
-            repo_root=root,
-            detail_level="minimal",
-        )
-    elif selected == "impact":
-        payload = get_impact_radius(
-            changed_files=changed_files,
-            max_depth=max_depth,
-            repo_root=root,
-            base=base,
-            detail_level="minimal",
-        )
-    elif selected == "architecture":
-        payload = get_architecture_overview_func(
-            repo_root=root,
-            detail_level="minimal",
-        )
-    elif selected == "relation":
-        payload = query_graph(
-            pattern=relation,
-            target=target or task,
-            repo_root=root,
-            detail_level="minimal",
-            max_results=result_limit,
-        )
-    elif selected == "review":
-        payload = get_review_context(
-            changed_files=changed_files,
-            max_depth=max_depth,
-            include_source=False,
-            max_lines_per_file=0,
-            repo_root=root,
-            base=base,
-            detail_level="minimal",
-        )
-    else:
+    try:
+        if selected == "search":
+            payload = semantic_search_nodes(
+                query=target or task,
+                limit=result_limit,
+                repo_root=root,
+                detail_level="minimal",
+            )
+        elif selected == "impact":
+            payload = get_impact_radius(
+                changed_files=changed_files,
+                max_depth=max_depth,
+                repo_root=root,
+                base=base,
+                detail_level="minimal",
+            )
+        elif selected == "architecture":
+            payload = get_architecture_overview_func(
+                repo_root=root,
+                detail_level="minimal",
+            )
+        elif selected == "relation":
+            payload = query_graph(
+                pattern=relation,
+                target=target or task,
+                repo_root=root,
+                detail_level="minimal",
+                max_results=result_limit,
+            )
+        elif selected == "review":
+            payload = get_review_context(
+                changed_files=changed_files,
+                max_depth=max_depth,
+                include_source=False,
+                max_lines_per_file=0,
+                repo_root=root,
+                base=base,
+                detail_level="minimal",
+            )
+        else:
+            payload = get_minimal_context(
+                task=task,
+                changed_files=changed_files,
+                repo_root=root,
+                base=base,
+            )
+    except Exception as exc:
+        logger.warning("Specialized context query failed; using orientation: %s", exc)
+        context_fallback = selected
+        selected = "orient"
         payload = get_minimal_context(
             task=task,
             changed_files=changed_files,
@@ -225,26 +264,45 @@ def forcegraph_context_tool(
     response["forcegraph_gateway"] = {
         "intent": selected,
         "requested_token_budget": token_budget,
+        "optimized_budget": budget,
         "detail_level": "minimal",
         "result_limit": result_limit,
         "max_depth": max_depth,
+        "fallback_from": context_fallback,
     }
     memory_root = Path(root) if root else Path.cwd()
     resolved_agent_id = resolve_agent_id(agent_id)
     resolved_task_id = resolve_task_id(memory_root, task_id)
-    shared_memory = read_agent_memory(
-        memory_root,
-        task_id=resolved_task_id,
-        limit=8,
-        max_chars=max(400, min(1600, token_budget)),
-    )
-    if shared_memory["entries"]:
-        response["shared_agent_memory"] = shared_memory
     response["forcegraph_gateway"]["agent_id"] = resolved_agent_id
     response["forcegraph_gateway"]["task_id"] = resolved_task_id
     response["forcegraph_gateway"]["identity_source"] = (
         "explicit" if task_id else "automatic"
     )
+
+    try:
+        ensure_task_passport(memory_root, task_id=resolved_task_id, goal=task)
+        passport = read_task_passport(
+            memory_root,
+            task_id=resolved_task_id,
+            max_chars=int(budget["passport_chars"]),
+        )
+        response["task_passport"] = passport
+        shared_memory = read_agent_memory(
+            memory_root,
+            task_id=resolved_task_id,
+            limit=8,
+            max_chars=int(budget["memory_chars"]),
+        )
+        if shared_memory["entries"]:
+            response["shared_agent_memory"] = shared_memory
+        response["agent_coordination"] = {"status": "ready", "local_only": True}
+    except Exception as exc:
+        logger.warning("Agent coordination unavailable; continuing without it: %s", exc)
+        response["agent_coordination"] = {
+            "status": "degraded",
+            "recoverable": True,
+            "message": "Code context is valid; shared passport/memory is temporarily unavailable.",
+        }
     return response
 
 
@@ -271,39 +329,142 @@ def forcegraph_memory_tool(
     and never requires a cloud service. Use the same task_id to isolate one team
     task from unrelated work.
     """
-    normalized_action = action.strip().lower()
+    requested_action = action.strip().lower()
+    normalized_action = requested_action
     if normalized_action not in {"read", "write", "handoff"}:
-        raise ValueError("action must be read, write, or handoff")
+        normalized_action = "write" if content else "read"
 
     root = _resolve_repo_root(repo_root)
     memory_root = Path(root) if root else Path.cwd()
     resolved_agent_id = resolve_agent_id(agent_id)
     resolved_task_id = resolve_task_id(memory_root, task_id)
     published = None
-    if normalized_action in {"write", "handoff"}:
-        if not content:
-            raise ValueError("content is required for write and handoff actions")
-        published = publish_agent_memory(
-            memory_root,
-            agent_id=resolved_agent_id,
-            content=content,
-            task_id=resolved_task_id,
-            kind="handoff" if normalized_action == "handoff" else kind,
-            ttl_hours=ttl_hours,
-        )
+    warning = None
+    try:
+        if normalized_action in {"write", "handoff"}:
+            if content:
+                published = publish_agent_memory(
+                    memory_root,
+                    agent_id=resolved_agent_id,
+                    content=content,
+                    task_id=resolved_task_id,
+                    kind="handoff" if normalized_action == "handoff" else kind,
+                    ttl_hours=ttl_hours,
+                )
+            else:
+                warning = "No content was supplied; returning current memory instead."
+                normalized_action = "read"
 
-    result = read_agent_memory(
-        memory_root,
-        task_id=resolved_task_id,
-        limit=limit,
-        max_chars=2400,
-    )
+        result = read_agent_memory(
+            memory_root,
+            task_id=resolved_task_id,
+            limit=limit,
+            max_chars=2400,
+        )
+    except Exception as exc:
+        logger.warning("Shared memory operation failed: %s", exc)
+        return {
+            "status": "degraded",
+            "recoverable": True,
+            "action": normalized_action,
+            "agent_id": resolved_agent_id,
+            "task_id": resolved_task_id,
+            "message": "Shared memory is temporarily unavailable; retry is safe.",
+        }
+
     result["action"] = normalized_action
+    result["requested_action"] = requested_action
+    result["action_fallback"] = requested_action != normalized_action
     result["agent_id"] = resolved_agent_id
     result["identity_source"] = "explicit" if task_id else "automatic"
+    if warning:
+        result["warning"] = warning
     if published is not None:
         result["published"] = published
     return result
+
+
+@mcp.tool()
+def forcegraph_passport_tool(
+    action: str = "read",
+    goal: Optional[str] = None,
+    status: Optional[str] = None,
+    summary: Optional[str] = None,
+    next_action: Optional[str] = None,
+    agent_id: str = "auto",
+    task_id: Optional[str] = None,
+    repo_root: Optional[str] = None,
+) -> dict:
+    """Coordinate parallel agents through one compact, shared task passport.
+
+    Actions are soft and fail-safe: read, update, claim, complete, or handoff.
+    Unknown actions fall back to update when fields are supplied, otherwise read.
+    The passport records the shared goal, current status, owner, summary, and
+    next action. Normal context calls include it automatically.
+    """
+    requested_action = action.strip().lower()
+    valid_actions = {"read", "update", "claim", "complete", "handoff"}
+    normalized_action = requested_action
+    if normalized_action not in valid_actions:
+        normalized_action = "update" if any(
+            value is not None for value in (goal, status, summary, next_action)
+        ) else "read"
+
+    root = _resolve_repo_root(repo_root)
+    memory_root = Path(root) if root else Path.cwd()
+    resolved_agent_id = resolve_agent_id(agent_id)
+    resolved_task_id = resolve_task_id(memory_root, task_id)
+
+    try:
+        ensure_task_passport(
+            memory_root,
+            task_id=resolved_task_id,
+            goal=goal or summary or "Shared agent task",
+        )
+        if normalized_action == "read":
+            result = read_task_passport(memory_root, task_id=resolved_task_id)
+        else:
+            optimized_status = status
+            claim = normalized_action == "claim"
+            if normalized_action == "claim":
+                optimized_status = status or "in_progress"
+            elif normalized_action == "complete":
+                optimized_status = status or "completed"
+            elif normalized_action == "handoff":
+                optimized_status = status or "handoff"
+            result = update_task_passport(
+                memory_root,
+                task_id=resolved_task_id,
+                agent_id=resolved_agent_id,
+                goal=goal,
+                status=optimized_status,
+                summary=summary,
+                next_action=next_action,
+                claim=claim,
+            )
+            if normalized_action == "handoff" and (summary or next_action):
+                publish_agent_memory(
+                    memory_root,
+                    agent_id=resolved_agent_id,
+                    task_id=resolved_task_id,
+                    kind="handoff",
+                    content=summary or next_action or "Handoff ready",
+                )
+        result["action"] = normalized_action
+        result["requested_action"] = requested_action
+        result["action_fallback"] = requested_action != normalized_action
+        result["agent_id"] = resolved_agent_id
+        return result
+    except Exception as exc:
+        logger.warning("Task passport operation failed: %s", exc)
+        return {
+            "status": "degraded",
+            "recoverable": True,
+            "action": normalized_action,
+            "agent_id": resolved_agent_id,
+            "task_id": resolved_task_id,
+            "message": "Task passport is temporarily unavailable; code work can continue.",
+        }
 
 
 @mcp.tool()
@@ -1220,6 +1381,7 @@ def pre_merge_check(base: str = "HEAD~1") -> list[dict]:
 COMPACT_TOOL_NAMES: tuple[str, ...] = (
     "forcegraph_context_tool",
     "forcegraph_memory_tool",
+    "forcegraph_passport_tool",
     "detect_changes_tool",
     "build_or_update_graph_tool",
 )

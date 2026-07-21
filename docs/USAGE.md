@@ -70,6 +70,25 @@ Normal `forcegraph_context_tool` calls automatically include recent memory for
 the resolved task. Entries expire by default, common secret assignments are redacted,
 and response size is bounded so shared memory does not become a second transcript.
 
+## Task Passport
+
+`forcegraph_passport_tool` keeps one compact coordination record per automatic
+task identity:
+
+- goal
+- status
+- owner agent
+- summary
+- next action
+
+Actions are `read`, `update`, `claim`, `complete`, and `handoff`.
+Unknown actions fall back safely instead of interrupting the agent. Normal
+`forcegraph_context_tool` responses include the passport automatically.
+
+Memory writes are not rejected for being long. Full local content is preserved;
+only retrieved model context is softly optimized. Unusual token, result, TTL,
+and character limits are normalized without failing the coding task.
+
 ## Core Workflow
 
 ### 1. Build the graph (first time only)
