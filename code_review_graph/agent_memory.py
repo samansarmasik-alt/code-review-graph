@@ -86,24 +86,28 @@ def publish_agent_memory(
 
     now = time.time()
     expires_at = now + ttl_hours * 3600
-    with _connect(repo_root) as connection:
-        connection.execute("DELETE FROM agent_memory WHERE expires_at <= ?", (now,))
-        cursor = connection.execute(
-            """
-            INSERT INTO agent_memory
-                (task_id, agent_id, kind, content, created_at, expires_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (
-                normalized_task,
-                normalized_agent,
-                normalized_kind,
-                normalized_content,
-                now,
-                expires_at,
-            ),
-        )
-        entry_id = int(cursor.lastrowid)
+    connection = _connect(repo_root)
+    try:
+        with connection:
+            connection.execute("DELETE FROM agent_memory WHERE expires_at <= ?", (now,))
+            cursor = connection.execute(
+                """
+                INSERT INTO agent_memory
+                    (task_id, agent_id, kind, content, created_at, expires_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    normalized_task,
+                    normalized_agent,
+                    normalized_kind,
+                    normalized_content,
+                    now,
+                    expires_at,
+                ),
+            )
+            entry_id = int(cursor.lastrowid)
+    finally:
+        connection.close()
 
     return {
         "id": entry_id,
@@ -131,30 +135,34 @@ def read_agent_memory(
 
     now = time.time()
     normalized_task = task_id.strip() if task_id else None
-    with _connect(repo_root) as connection:
-        connection.execute("DELETE FROM agent_memory WHERE expires_at <= ?", (now,))
-        if normalized_task is None:
-            rows = connection.execute(
-                """
-                SELECT id, task_id, agent_id, kind, content, created_at, expires_at
-                FROM agent_memory
-                WHERE expires_at > ?
-                ORDER BY created_at DESC, id DESC
-                LIMIT ?
-                """,
-                (now, limit),
-            ).fetchall()
-        else:
-            rows = connection.execute(
-                """
-                SELECT id, task_id, agent_id, kind, content, created_at, expires_at
-                FROM agent_memory
-                WHERE expires_at > ? AND task_id = ?
-                ORDER BY created_at DESC, id DESC
-                LIMIT ?
-                """,
-                (now, normalized_task, limit),
-            ).fetchall()
+    connection = _connect(repo_root)
+    try:
+        with connection:
+            connection.execute("DELETE FROM agent_memory WHERE expires_at <= ?", (now,))
+            if normalized_task is None:
+                rows = connection.execute(
+                    """
+                    SELECT id, task_id, agent_id, kind, content, created_at, expires_at
+                    FROM agent_memory
+                    WHERE expires_at > ?
+                    ORDER BY created_at DESC, id DESC
+                    LIMIT ?
+                    """,
+                    (now, limit),
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    """
+                    SELECT id, task_id, agent_id, kind, content, created_at, expires_at
+                    FROM agent_memory
+                    WHERE expires_at > ? AND task_id = ?
+                    ORDER BY created_at DESC, id DESC
+                    LIMIT ?
+                    """,
+                    (now, normalized_task, limit),
+                ).fetchall()
+    finally:
+        connection.close()
 
     selected: list[dict[str, Any]] = []
     used_chars = 0

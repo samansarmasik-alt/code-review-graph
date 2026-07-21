@@ -69,6 +69,11 @@ class TestContextIntentRouting:
             "with_provenance",
             lambda payload, root: dict(payload),
         )
+        monkeypatch.setattr(
+            crg_main,
+            "read_agent_memory",
+            lambda *args, **kwargs: {"entries": []},
+        )
         tool = getattr(crg_main.forcegraph_context_tool, "fn", None)
         gateway = tool or crg_main.forcegraph_context_tool
 
