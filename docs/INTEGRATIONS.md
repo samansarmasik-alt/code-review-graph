@@ -22,6 +22,12 @@ The generated MCP command starts with `--auto-watch`. After the one-time
 connection, the graph follows file changes for as long as the AI client is
 running; users do not need to manage build, update, or watch commands.
 
+It also starts with `--tool-profile compact`. The agent sees only the nine
+high-value tools required for orientation, search, relationships, impact,
+review, architecture, traversal, and graph refresh. This avoids repeatedly
+sending the schemas of rarely used administration and analysis tools. Run
+`forcegraph serve --tool-profile full` only for advanced manual workflows.
+
 Use `--dry-run` to preview files, `--fast` for a large first build, or
 `--platform NAME` to target one client explicitly.
 

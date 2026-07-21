@@ -10,6 +10,8 @@ uvx --from "git+https://github.com/samansarmasik-alt/code-review-graph.git" forc
 
 This is the recommended path: it auto-detects clients, connects MCP, builds the
 graph, verifies readiness, and creates a generic MCP config for other tools.
+Connected clients automatically use the compact nine-tool MCP profile, while
+`forcegraph serve --tool-profile full` remains available for advanced workflows.
 
 The compatible two-step flow remains available:
 

@@ -281,6 +281,9 @@ def _build_server_entry(
 ) -> dict[str, Any]:
     """Build the MCP server entry for a platform."""
     command, args = _detect_serve_command()
+    # Connected projects use the compact nine-tool surface by default.
+    # Manual `serve` keeps the backwards-compatible full surface.
+    args = [*args, "--tool-profile", "compact"]
     if key == "opencode":
         opencode_command = [command, *args]
         if repo_root is not None:

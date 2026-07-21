@@ -18,7 +18,7 @@ tests, documentation, and compatibility checks are complete.
 
 - [ ] Define a versioned JSON schema for targeted AI context bundles
 - [ ] Include relevant symbols, callers, callees, tests, flows, and risk evidence
-- [ ] Enforce configurable token and file budgets
+- [ ] Enforce configurable response token and file budgets
 - [ ] Add deterministic receipts explaining why every context item was selected
 - [ ] Add secret and ignored-file filtering before bundle generation
 - [ ] Expose bundle generation through CLI and MCP
@@ -27,6 +27,7 @@ tests, documentation, and compatibility checks are complete.
 
 - [ ] Publish portable context bundle and review JSON schemas
 - [ ] Add adapter examples for generic MCP clients and agent frameworks
+- [x] Ship a compact default MCP capability profile for connected agents
 - [ ] Expose graph freshness and capability negotiation through MCP
 - [ ] Support graceful fallback when the graph is missing or stale
 - [ ] Keep all vendor-specific adapters optional and independently testable

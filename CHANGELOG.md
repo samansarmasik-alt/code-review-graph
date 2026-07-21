@@ -4,6 +4,14 @@
 
 ### ForceGraph additions
 
+- Added a named `compact` MCP tool profile containing the nine high-value tools
+  used by normal coding-agent workflows. One-command connections select it
+  automatically, reducing recurring tool-schema overhead; `full` remains
+  available for backwards compatibility and advanced workflows.
+- Added `--tool-profile compact|full` and `CRG_TOOL_PROFILE`, with explicit
+  `--tools` / `CRG_TOOLS` allow-lists retaining highest precedence.
+- Installation receipts now record the selected MCP tool profile.
+
 - Added `forcegraph connect`, a tool-neutral zero-argument onboarding command
   that auto-detects clients, builds the graph, verifies readiness, and emits a
   portable `.code-review-graph/mcp-config.json` for any other MCP client.

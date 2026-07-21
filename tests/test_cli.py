@@ -66,6 +66,7 @@ class TestServeCommand:
             repo_root="repo-root",
             auto_watch=True,
             tools=None,
+            tool_profile=None,
         )
 
     def test_mcp_alias_maps_to_serve(self):
@@ -82,7 +83,17 @@ class TestServeCommand:
         mock_serve.assert_called_once_with(
             repo_root="repo-root",
             auto_watch=False,
+            tool_profile=None,
         )
+
+
+    def test_serve_passes_compact_profile(self):
+        argv = ["code-review-graph", "serve", "--tool-profile", "compact"]
+        with patch.object(sys, "argv", argv):
+            with patch("code_review_graph.main.main") as mock_serve:
+                cli.main()
+
+        assert mock_serve.call_args.kwargs["tool_profile"] == "compact"
 
 
 class TestWatchInteraction:

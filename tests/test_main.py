@@ -28,6 +28,7 @@ def _isolate_crg_tools_env(monkeypatch):
     ``TestApplyToolFilter._restore_tools`` only sees the already-filtered
     set and cannot restore the dropped tools."""
     monkeypatch.delenv("CRG_TOOLS", raising=False)
+    monkeypatch.delenv("CRG_TOOL_PROFILE", raising=False)
 
 
 class TestResolveRepoRoot:
@@ -403,6 +404,7 @@ class TestApplyToolFilter:
     def _clean_env(self, monkeypatch):
         """Ensure CRG_TOOLS is not set from the outer environment."""
         monkeypatch.delenv("CRG_TOOLS", raising=False)
+    monkeypatch.delenv("CRG_TOOL_PROFILE", raising=False)
 
     @staticmethod
     async def _tool_names() -> set[str]:
@@ -454,3 +456,14 @@ class TestApplyToolFilter:
         crg_main._apply_tool_filter(" query_graph_tool , semantic_search_nodes_tool ")
         remaining = await self._tool_names()
         assert remaining == {"query_graph_tool", "semantic_search_nodes_tool"}
+
+    @pytest.mark.asyncio
+    async def test_compact_profile_keeps_high_value_surface(self):
+        crg_main._apply_tool_filter(tool_profile="compact")
+        remaining = await self._tool_names()
+        assert remaining == set(crg_main.COMPACT_TOOL_NAMES)
+        assert len(remaining) == 9
+
+    def test_unknown_profile_is_rejected(self):
+        with pytest.raises(ValueError, match="unknown tool profile"):
+            crg_main._apply_tool_filter(tool_profile="tiny")

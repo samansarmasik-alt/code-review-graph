@@ -40,6 +40,9 @@ GitHub Copilot ve CodeBuddy desteklenir.
 Bu işlem yalnızca bir kez yapılır. Sonrasında AI aracı ForceGraph MCP sunucusunu
 otomatik başlatır; `--auto-watch` dosya değişikliklerini kendiliğinden indeksler.
 Günlük kullanım için `build`, `update` veya `watch` komutu çalıştırmanız gerekmez.
+Kurulum ayrıca dokuz yüksek değerli araca sahip kompakt MCP profilini etkinleştirir.
+Böylece onlarca kullanılmayan araç şeması her agent turunda tekrar taşınmaz.
+İhtiyaç hâlinde `forcegraph serve --tool-profile full` ile bütün araçlar açılabilir.
 
 Tanımadığımız yeni bir MCP istemcisi için de
 `.code-review-graph/mcp-config.json` dosyası üretilir. Bu dosyadaki
@@ -137,6 +140,10 @@ ForceGraph auto-detects installed clients, safely merges their MCP settings,
 builds the graph, and writes a machine-readable receipt. It supports Codex,
 Claude Code, Cursor, Windsurf, Zed, Continue, OpenCode, Gemini CLI, Qwen Code,
 Qoder, Kiro, GitHub Copilot, and CodeBuddy.
+
+Connected clients use the compact nine-tool MCP profile by default, reducing
+tool-schema overhead while keeping the full surface available with
+`forcegraph serve --tool-profile full`.
 
 Unknown or future MCP clients can use the generated
 `.code-review-graph/mcp-config.json` file. Copy its
