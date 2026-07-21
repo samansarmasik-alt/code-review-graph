@@ -84,7 +84,7 @@ Standart bağlantıda yalnızca şu beş araç görünür:
 
 | Araç | Görevi |
 | --- | --- |
-| `forcegraph_context_tool` | İsteğe uygun kod bağlamını hazırlar |
+| `forcegraph_context_tool` | İstekle ilgili kodları bulur ve kısa bir bağlam hazırlar |
 | `forcegraph_memory_tool` | Ajanlar arasında not ve devir bilgisi paylaşır |
 | `forcegraph_passport_tool` | Ortak görevin durumunu ve sonraki adımını tutar |
 | `detect_changes_tool` | Değişiklikleri ve riskleri ayrıntılı inceler |
@@ -180,16 +180,16 @@ Gelişmiş graf araçlarını tek tek yönetmek isteyenler için orijinal proje 
 doğrudan olabilir. Bir kodlama aracına projeyi bağlayıp uygun bağlamı kendisinin
 seçmesini isteyenler için ForceGraph daha kolay bir kullanım sunar.
 
-## Token kullanımı hakkında
+## Token kullanımı
 
 Orijinal motorun yayımlanmış ölçümlerinde, bütün kaynak kodu okuma
 karşılaştırmasına göre soru başına graf bağlamı medyan olarak yaklaşık 82 kat
 daha küçüktür. Ölçüm yöntemi
 [`docs/REPRODUCING.md`](docs/REPRODUCING.md) içinde açıklanır.
 
-Bu sayı toplam konuşma maliyetinin 82 kat azalacağı anlamına gelmez. Sistem
-talimatları, konuşma geçmişi, modelin işlemesi ve üretilen cevap ayrı token
-kullanır.
+Bu ölçüm yalnızca modele gönderilen kod bağlamını karşılaştırır. Toplam
+konuşma maliyetine sistem talimatları, konuşma geçmişi, modelin işlemesi ve
+üretilen cevap da dahildir.
 
 ForceGraph şu tekrarları azaltmayı amaçlar:
 
@@ -197,8 +197,8 @@ ForceGraph şu tekrarları azaltmayı amaçlar:
 2. Kullanılmayan MCP araçlarının modele tanıtılması
 3. Farklı ajanların aynı araştırmayı yeniden yapması
 
-Beş araçlık görünüm ve ortak görev kaydı için ayrıca bağımsız bir model ölçümü
-henüz yayımlanmadı. Ölçülmemiş bir kazanç için kesin oran verilmez.
+Beş araçlık görünüm ile ortak görev kaydının toplam token kullanımına etkisi
+için henüz bağımsız bir ölçüm yayımlanmadı.
 
 ## Ne zaman kullanmaya değmez?
 
