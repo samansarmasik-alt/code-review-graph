@@ -25,8 +25,9 @@ running; users do not need to manage build, update, or watch commands.
 It also starts with `--tool-profile compact`. The agent sees only `forcegraph_context_tool`, `forcegraph_memory_tool`,
 `detect_changes_tool`, and `build_or_update_graph_tool`. The gateway routes Turkish or English tasks to
 orientation, search, relationship, impact, architecture, or compact review
-context. This avoids repeatedly
-sending the schemas of rarely used administration and analysis tools. Run
+context. Shared-memory identity is zero-config: ForceGraph uses explicit IDs,
+environment variables, then the current git branch. This avoids repeatedly
+sending rarely used tool schemas or making users coordinate task IDs. Run
 `forcegraph serve --tool-profile full` only for advanced manual workflows.
 
 Use `--dry-run` to preview files, `--fast` for a large first build, or

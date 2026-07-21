@@ -12,7 +12,8 @@ When using code-review-graph MCP tools, follow these rules:
 4. The `next_tool_suggestions` field in every response tells you the optimal next step.
 5. Target: ≤5 tool calls per task, ≤800 total tokens of graph context.
 6. When multiple agents work in parallel, share only decisions, findings, and
-   handoffs through `forcegraph_memory_tool` with a common task_id.
+   handoffs through `forcegraph_memory_tool`. Identity is automatic; pass a
+   task_id only when branch-level grouping is not enough.
 
 ## Architecture
 

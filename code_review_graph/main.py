@@ -18,7 +18,12 @@ from typing import Optional
 from fastmcp import FastMCP
 
 from . import incremental as _incremental
-from .agent_memory import publish_agent_memory, read_agent_memory
+from .agent_memory import (
+    publish_agent_memory,
+    read_agent_memory,
+    resolve_agent_id,
+    resolve_task_id,
+)
 from .graph import GraphStore
 from .incremental import find_project_root, get_db_path, start_watch_thread
 from .prompts import (
@@ -145,7 +150,7 @@ def forcegraph_context_tool(
     relation: str = "callers_of",
     changed_files: Optional[list[str]] = None,
     token_budget: int = 800,
-    agent_id: str = "agent",
+    agent_id: str = "auto",
     task_id: Optional[str] = None,
     repo_root: Optional[str] = None,
     base: str = "HEAD~1",
@@ -225,23 +230,28 @@ def forcegraph_context_tool(
         "max_depth": max_depth,
     }
     memory_root = Path(root) if root else Path.cwd()
+    resolved_agent_id = resolve_agent_id(agent_id)
+    resolved_task_id = resolve_task_id(memory_root, task_id)
     shared_memory = read_agent_memory(
         memory_root,
-        task_id=task_id,
+        task_id=resolved_task_id,
         limit=8,
         max_chars=max(400, min(1600, token_budget)),
     )
     if shared_memory["entries"]:
         response["shared_agent_memory"] = shared_memory
-    response["forcegraph_gateway"]["agent_id"] = agent_id
-    response["forcegraph_gateway"]["task_id"] = task_id
+    response["forcegraph_gateway"]["agent_id"] = resolved_agent_id
+    response["forcegraph_gateway"]["task_id"] = resolved_task_id
+    response["forcegraph_gateway"]["identity_source"] = (
+        "explicit" if task_id else "automatic"
+    )
     return response
 
 
 @mcp.tool()
 def forcegraph_memory_tool(
     action: str = "read",
-    agent_id: str = "agent",
+    agent_id: str = "auto",
     content: Optional[str] = None,
     task_id: Optional[str] = None,
     kind: str = "note",
@@ -267,26 +277,30 @@ def forcegraph_memory_tool(
 
     root = _resolve_repo_root(repo_root)
     memory_root = Path(root) if root else Path.cwd()
+    resolved_agent_id = resolve_agent_id(agent_id)
+    resolved_task_id = resolve_task_id(memory_root, task_id)
     published = None
     if normalized_action in {"write", "handoff"}:
         if not content:
             raise ValueError("content is required for write and handoff actions")
         published = publish_agent_memory(
             memory_root,
-            agent_id=agent_id,
+            agent_id=resolved_agent_id,
             content=content,
-            task_id=task_id,
+            task_id=resolved_task_id,
             kind="handoff" if normalized_action == "handoff" else kind,
             ttl_hours=ttl_hours,
         )
 
     result = read_agent_memory(
         memory_root,
-        task_id=task_id,
+        task_id=resolved_task_id,
         limit=limit,
         max_chars=2400,
     )
     result["action"] = normalized_action
+    result["agent_id"] = resolved_agent_id
+    result["identity_source"] = "explicit" if task_id else "automatic"
     if published is not None:
         result["published"] = published
     return result

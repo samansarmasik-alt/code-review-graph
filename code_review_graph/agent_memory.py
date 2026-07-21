@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import re
 import sqlite3
+import subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -14,6 +16,51 @@ _SECRET_ASSIGNMENT = re.compile(
     r"(\s*[:=]\s*)([\"']?)([^\s,;\"']{4,})"
 )
 _BEARER_TOKEN = re.compile(r"(?i)\bbearer\s+[a-z0-9._~+/-]{8,}=*")
+
+
+def resolve_agent_id(explicit: str | None = None) -> str:
+    """Resolve a local agent identity without user configuration."""
+    candidate = (explicit or "").strip()
+    if candidate and candidate.lower() not in {"auto", "agent"}:
+        if len(candidate) > 80:
+            raise ValueError("agent_id must be at most 80 characters")
+        return candidate
+    for variable in (
+        "FORCEGRAPH_AGENT_ID",
+        "CODEX_THREAD_ID",
+        "CLAUDE_SESSION_ID",
+        "AGENT_ID",
+    ):
+        value = os.environ.get(variable, "").strip()
+        if value:
+            return value[:80]
+    return f"agent-{os.getpid()}"
+
+
+def resolve_task_id(repo_root: Path, explicit: str | None = None) -> str:
+    """Resolve task identity from explicit input, env, git branch, or workspace."""
+    candidate = (explicit or "").strip()
+    if not candidate:
+        candidate = os.environ.get("FORCEGRAPH_TASK_ID", "").strip()
+    if candidate:
+        if len(candidate) > 120:
+            raise ValueError("task_id must be at most 120 characters")
+        return candidate
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(repo_root.expanduser().resolve()), "branch", "--show-current"],
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=2,
+        )
+        branch = completed.stdout.strip()
+        if completed.returncode == 0 and branch:
+            return f"branch:{branch}"[:120]
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return "workspace"
 
 
 def _redact_memory_content(content: str) -> str:

@@ -74,6 +74,8 @@ class TestContextIntentRouting:
             "read_agent_memory",
             lambda *args, **kwargs: {"entries": []},
         )
+        monkeypatch.setattr(crg_main, "resolve_agent_id", lambda value: "agent-1")
+        monkeypatch.setattr(crg_main, "resolve_task_id", lambda root, value: "branch:test")
         tool = getattr(crg_main.forcegraph_context_tool, "fn", None)
         gateway = tool or crg_main.forcegraph_context_tool
 
