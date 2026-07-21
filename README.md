@@ -84,7 +84,7 @@ Standart bağlantıda yalnızca şu beş araç görünür:
 
 | Araç | Görevi |
 | --- | --- |
-| `forcegraph_context_tool` | İsteğe uygun kod bağlamını hazırlar |
+| `forcegraph_context_tool` | İstekle ilgili kodları bulur ve kısa bir bağlam hazırlar |
 | `forcegraph_memory_tool` | Ajanlar arasında not ve devir bilgisi paylaşır |
 | `forcegraph_passport_tool` | Ortak görevin durumunu ve sonraki adımını tutar |
 | `detect_changes_tool` | Değişiklikleri ve riskleri ayrıntılı inceler |
@@ -180,7 +180,7 @@ Gelişmiş graf araçlarını tek tek yönetmek isteyenler için orijinal proje 
 doğrudan olabilir. Bir kodlama aracına projeyi bağlayıp uygun bağlamı kendisinin
 seçmesini isteyenler için ForceGraph daha kolay bir kullanım sunar.
 
-## Token kullanımı hakkında
+## Token kullanımı
 
 Orijinal motorun yayımlanmış ölçümlerinde, bütün kaynak kodu okuma
 karşılaştırmasına göre soru başına graf bağlamı medyan olarak yaklaşık 82 kat
