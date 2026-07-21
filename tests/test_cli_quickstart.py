@@ -149,3 +149,53 @@ def test_quickstart_cli_dispatches_without_confirmation(tmp_path):
     assert args.platform == "codex"
     assert args.no_build is True
     assert args.yes is True
+
+
+def test_connect_writes_vendor_neutral_mcp_config(monkeypatch, tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    data_dir = repo / ".code-review-graph"
+    monkeypatch.setattr(
+        cli,
+        "_handle_init",
+        lambda args: {
+            "repo_root": str(repo),
+            "configured_platforms": [],
+            "dry_run": False,
+        },
+    )
+    monkeypatch.setattr(
+        "code_review_graph.incremental.get_db_path",
+        lambda root: data_dir / "graph.db",
+    )
+    monkeypatch.setattr(
+        "code_review_graph.skills._build_server_entry",
+        lambda platform, repo_root=None: {
+            "command": "forcegraph",
+            "args": ["serve", "--auto-watch"],
+            "cwd": str(repo_root),
+            "type": "stdio",
+        },
+    )
+
+    args = _args(repo, command="connect", no_build=True, platform="all")
+    receipt = cli._handle_quickstart(args)
+
+    config_path = data_dir / "mcp-config.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    assert config["schema_version"] == 1
+    assert config["mcpServers"]["code-review-graph"]["command"] == "forcegraph"
+    assert config["mcpServers"]["code-review-graph"]["args"][-1] == "--auto-watch"
+    assert receipt["universal_mcp_config"] == str(config_path)
+
+
+def test_connect_cli_defaults_to_auto_detection(tmp_path):
+    argv = ["forcegraph", "connect", "--repo", str(tmp_path), "--no-build"]
+    with patch.object(sys, "argv", argv):
+        with patch("code_review_graph.cli._handle_quickstart") as handler:
+            cli.main()
+
+    args = handler.call_args.args[0]
+    assert args.command == "connect"
+    assert args.platform == "all"
+    assert args.yes is True

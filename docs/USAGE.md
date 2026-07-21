@@ -1,13 +1,22 @@
 # Code Review Graph — User Guide
 
-**Applies to:** v2.3.6
+**Applies to:** v2.4.0
 
 ## Installation
 
 ```bash
+uvx --from "git+https://github.com/samansarmasik-alt/code-review-graph.git" forcegraph connect
+```
+
+This is the recommended path: it auto-detects clients, connects MCP, builds the
+graph, verifies readiness, and creates a generic MCP config for other tools.
+
+The compatible two-step flow remains available:
+
+```bash
 pip install code-review-graph
-code-review-graph install    # auto-detects and configures all supported platforms
-code-review-graph build      # parse your codebase
+code-review-graph install
+code-review-graph build
 ```
 
 `install` detects which AI coding tools you have, writes the correct MCP configuration for each one, and installs platform-native hooks where supported. Restart your editor/tool after installing.

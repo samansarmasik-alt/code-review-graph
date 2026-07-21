@@ -4,6 +4,15 @@
 
 ### ForceGraph additions
 
+- Added `forcegraph connect`, a tool-neutral zero-argument onboarding command
+  that auto-detects clients, builds the graph, verifies readiness, and emits a
+  portable `.code-review-graph/mcp-config.json` for any other MCP client.
+- Connected MCP servers now start with `--auto-watch`, so the one-time setup
+  remains current without requiring users to run maintenance commands.
+- Repositioned ForceGraph as an independent universal MCP code-intelligence
+  layer; removed the ForceCode-specific product dependency from the roadmap.
+- Updated project metadata, integration documentation, and bilingual quickstart
+  examples for the maintained fork.
 - Added `forcegraph` as a compatibility-preserving CLI alias.
 - Added `forcegraph quickstart`, which installs the selected AI integration,
   builds the graph, verifies the result, and writes a machine-readable readiness

@@ -1,6 +1,7 @@
 # Documentation Index
 
 - [USAGE.md](USAGE.md) -- How to install and use
+- [INTEGRATIONS.md](INTEGRATIONS.md) -- One-command setup for supported and generic MCP clients
 - [FAQ.md](FAQ.md) -- How it compares to LSP, RAG, grep, and similar tools; when not to use it
 - [FEATURES.md](FEATURES.md) -- What's included, changelog
 - [COMMANDS.md](COMMANDS.md) -- All 30 MCP tools, 5 MCP prompts, skills, and CLI commands

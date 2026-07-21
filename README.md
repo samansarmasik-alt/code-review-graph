@@ -2,17 +2,16 @@
 
 # ForceGraph
 
-### Local-first code intelligence for safer AI-assisted development
+### One local code graph. Every AI coding tool.
 
-Build a persistent structural map of a repository, calculate the blast radius of
-changes, and give coding agents only the context they actually need.
+ForceGraph maps your repository once, then gives any MCP-capable coding agent
+the smallest useful architecture, impact, test, and review context.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-F4C430.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
-[![MCP](https://img.shields.io/badge/MCP-compatible-8A2BE2.svg)](https://modelcontextprotocol.io/)
-[![Status](https://img.shields.io/badge/status-active%20development-ff8c00.svg)](#project-status)
+[![MCP](https://img.shields.io/badge/MCP-universal-8A2BE2.svg)](https://modelcontextprotocol.io/)
 
-[Türkçe](#türkçe) · [English](#english) · [Roadmap](docs/FORCEGRAPH_ROADMAP.md) · [Upstream project](https://github.com/tirth8205/code-review-graph)
+[Türkçe](#türkçe) · [English](#english) · [Integrations](docs/INTEGRATIONS.md) · [Roadmap](docs/FORCEGRAPH_ROADMAP.md)
 
 </div>
 
@@ -20,112 +19,87 @@ changes, and give coding agents only the context they actually need.
 
 ## Türkçe
 
-ForceGraph; kaynak kodunu fonksiyonlar, sınıflar, importlar, çağrılar ve testler
-arasında gezilebilen bir grafa dönüştüren yerel bir kod zekâsı motorudur. Amaç,
-AI kodlama araçlarının bütün projeyi tekrar tekrar okuması yerine yalnızca görevle
-ilgili dosyaları ve ilişkileri görmesini sağlamaktır.
+ForceGraph herhangi bir AI kodlama aracının projeyi tekrar tekrar baştan
+okumasını önleyen, yerel çalışan bir kod zekâsı katmanıdır. Fonksiyonları,
+sınıfları, importları, çağrıları, testleri ve çalışma akışlarını SQLite tabanlı
+bir grafa dönüştürür. Kaynak kodunuz yüklenmez.
 
-> [!IMPORTANT]
-> ForceGraph, [`code-review-graph`](https://github.com/tirth8205/code-review-graph)
-> projesinin MIT lisanslı geliştirme fork'udur. Mevcut sürüm upstream motorunu ve
-> `code-review-graph` CLI adını uyumluluk için korur. ForceGraph'a özgü özellikler
-> aşamalı olarak geliştirilmektedir.
+### Tek komut, araç seçmek yok
 
-### Neden ForceGraph?
+Proje klasöründe çalıştırın:
 
-- **Etki alanı analizi:** Bir değişikliğin etkileyebileceği çağıranları,
-  bağımlılıkları, akışları ve testleri gösterir.
-- **Token bütçeli bağlam:** AI'a bütün depo yerine küçük ve hedeflenmiş bir bağlam
-  paketi sunar.
-- **Yerel öncelikli:** Ana grafik SQLite içinde yerelde tutulur; temel çalışma
-  için harici veritabanı gerekmez.
-- **Artımlı indeksleme:** Yalnızca değişen dosyaları yeniden ayrıştırır.
-- **MCP ve CLI:** Codex, Claude Code, Cursor ve MCP destekleyen diğer araçlara
-  bağlanabilir.
-- **Geniş dil desteği:** Python, JavaScript/TypeScript, Go, Rust, Java, C/C++, C#,
-  PHP, PowerShell ve birçok başka dili Tree-sitter tabanlı olarak analiz eder.
+```bash
+uvx --from "git+https://github.com/samansarmasik-alt/code-review-graph.git" forcegraph connect
+```
 
-### Çalışma mantığı
+`connect` kurulu AI araçlarını otomatik algılar, mevcut MCP ayarlarını bozmadan
+ForceGraph'ı ekler, kod grafını oluşturur ve sonucu doğrular. Codex, Claude Code,
+Cursor, Windsurf, Zed, Continue, OpenCode, Gemini CLI, Qwen Code, Qoder, Kiro,
+GitHub Copilot ve CodeBuddy desteklenir.
+
+Bu işlem yalnızca bir kez yapılır. Sonrasında AI aracı ForceGraph MCP sunucusunu
+otomatik başlatır; `--auto-watch` dosya değişikliklerini kendiliğinden indeksler.
+Günlük kullanım için `build`, `update` veya `watch` komutu çalıştırmanız gerekmez.
+
+Tanımadığımız yeni bir MCP istemcisi için de
+`.code-review-graph/mcp-config.json` dosyası üretilir. Bu dosyadaki
+`mcpServers.code-review-graph` nesnesini istemcinin MCP ayarına kopyalamak
+yeterlidir.
+
+`uvx` yoksa:
+
+```bash
+python -m pip install "git+https://github.com/samansarmasik-alt/code-review-graph.git"
+forcegraph connect
+```
+
+AI aracına yaptırmak isterseniz yalnızca şunu söyleyin:
+
+> Bu repoya ForceGraph'ı bağla. AI_INSTALL.md dosyasını uygula ve receipt hazır
+> olmadan işlemi tamamlandı sayma.
+
+### Ne kazandırır?
+
+- **Daha az token:** Agent, tüm repo yerine ilgili sembolleri ve ilişkileri alır.
+- **Daha güvenli değişiklik:** Bir fonksiyonun çağıranları, testleri ve etki alanı
+  değişiklikten önce görülebilir.
+- **Tek grafik, çok araç:** Aynı yerel veri Codex, Claude Code, Cursor ve diğer
+  MCP istemcileri tarafından kullanılabilir.
+- **Artımlı güncelleme:** Yalnızca değişen dosyalar yeniden işlenir.
+- **Gizlilik:** Temel özellikler internete kod göndermez ve harici veritabanı
+  istemez.
 
 ```mermaid
 flowchart LR
-    A[Kaynak kod] --> B[Tree-sitter ayrıştırma]
-    B --> C[(SQLite kod grafı)]
-    C --> D[Etki ve risk analizi]
-    D --> E[Token bütçeli bağlam]
-    E --> F[AI kodlama aracı]
+    A[Repository] --> B[ForceGraph]
+    B --> C[(Local SQLite graph)]
+    C --> D[MCP]
+    D --> E[Your AI tool]
 ```
 
-Bir dosya değiştiğinde ForceGraph bütün depoyu yeniden okutmak yerine grafı
-izleyerek muhtemel etki alanını çıkarır:
+### Günlük kullanım
 
-```text
-login()
-├── auth_service.py
-├── user_controller.py
-├── session_manager.py
-└── tests/test_login.py
-```
-
-### Hızlı başlangıç
-
-Bir AI kodlama aracına yalnızca şunu söyleyebilirsiniz:
-
-> Bu projeye ForceGraph'ı entegre et. [AI_INSTALL.md](AI_INSTALL.md) talimatlarını
-> uygula, `quickstart-receipt.json` durumu `ready` olana kadar kurulumu doğrula.
-
-Ya da proje klasöründe tek komut çalıştırın:
+Aşağıdaki komutlar yalnızca manuel inceleme ve hata ayıklama içindir; zorunlu
+değildir:
 
 ```bash
-uvx --from "git+https://github.com/samansarmasik-alt/code-review-graph.git" forcegraph quickstart --platform codex --yes
+forcegraph status
+forcegraph update
+forcegraph detect-changes --brief
+forcegraph visualize
+forcegraph watch
 ```
 
-`codex` yerine kullandığınız aracı yazabilirsiniz: `claude-code`, `cursor`,
-`windsurf`, `gemini-cli`, `qoder`, `kiro`, `copilot` veya `codebuddy`.
-
-Komut tek seferde:
-
-1. MCP yapılandırmasını kurar.
-2. Araca özgü talimat, skill ve hook'ları hazırlar.
-3. Kaynak kod grafını oluşturur.
-4. Sonucu `.code-review-graph/quickstart-receipt.json` dosyasında doğrular.
-5. Yeniden başlatma gerekip gerekmediğini açıkça bildirir.
-
-Kurulu paketle aynı işlem:
+Belirli bir aracı zorlamak hâlâ mümkündür:
 
 ```bash
-pip install code-review-graph
-forcegraph quickstart --platform codex --yes
+forcegraph connect --platform codex
+forcegraph connect --platform claude-code
+forcegraph connect --platform cursor
+forcegraph install --platform codebuddy
 ```
 
-Kaynak koddan geliştirmek için:
-
-```bash
-git clone https://github.com/samansarmasik-alt/code-review-graph.git
-cd code-review-graph
-uv sync --group dev
-uv run forcegraph quickstart --platform codex --yes
-```
-
-Yararlı komutlar:
-
-```bash
-code-review-graph status
-code-review-graph update
-code-review-graph watch
-code-review-graph visualize
-```
-
-Belirli bir AI aracı için yalnızca onun MCP yapılandırmasını kurabilirsiniz:
-
-```bash
-code-review-graph install --platform codex
-code-review-graph install --platform claude-code
-code-review-graph install --platform cursor
-code-review-graph install --platform codebuddy
-```
-
-İsteğe bağlı yetenek paketleri:
+İsteğe bağlı analiz paketleri:
 
 ```bash
 pip install "code-review-graph[embeddings]"
@@ -137,89 +111,61 @@ pip install "code-review-graph[wiki]"
 pip install "code-review-graph[all]"
 ```
 
-### ForceCode hedefi
+Kurulum sonunda iki taşınabilir dosya oluşur:
 
-ForceGraph bağımsız çalışmaya devam ederken ForceCode'un bağlam ve yürütme
-motorlarıyla doğrudan haberleşecek şekilde geliştirilecektir:
-
-```mermaid
-flowchart LR
-    A[Kullanıcı isteği] --> B[ForceGraph]
-    B --> C[ForceContext]
-    C --> D[Execution Kernel]
-    D --> E[Test ve kanıt]
-```
-
-Planlanan ilk entegrasyon komutları:
-
-- `/graph` — proje mimarisini ve kritik düğümleri gösterir.
-- `/impact` — seçilen değişikliğin etki alanını çıkarır.
-- `/review` — diff, risk, test boşluğu ve gerekli bağlamı birleştirir.
-
-Bu komutlar henüz kararlı sürüm özelliği değildir. Uygulama sırası ve kabul
-kriterleri [ForceGraph yol haritasında](docs/FORCEGRAPH_ROADMAP.md) tutulur.
-
-### Project status
-
-ForceGraph aktif geliştirme aşamasındadır. Şu anda güvenilir upstream tabanı
-korunmakta; yeni marka, entegrasyon sınırları ve geliştirme planı kurulmaktadır.
-Üretim ortamında kullanmadan önce sürüm notlarını ve test sonuçlarını kontrol edin.
+- `.code-review-graph/quickstart-receipt.json` — doğrulanmış kurulum sonucu;
+- `.code-review-graph/mcp-config.json` — genel MCP bağlantı tanımı.
 
 ---
 
 ## English
 
-ForceGraph is a local-first code intelligence engine that turns a repository into
-a navigable graph of functions, classes, imports, calls, execution flows, and
-tests. It helps AI coding tools understand change impact without repeatedly
-reading an entire codebase.
+ForceGraph is a local-first code intelligence layer for any AI coding tool. It
+indexes functions, classes, imports, calls, tests, and execution flows once, then
+serves focused context through MCP instead of making every agent reread the
+whole repository.
 
-### Core capabilities
+### One command, no tool selection
 
-- Persistent Tree-sitter-based structural graph
-- Blast-radius and affected-flow analysis
-- Incremental updates for changed files
-- Token-aware review context through MCP and CLI
-- Local SQLite storage with no required cloud database
-- Interactive graph visualisation and export
-- Broad language and framework coverage
-- One-command, agent-readable onboarding with a verifiable installation receipt
-
-ForceGraph is an active development fork of
-[`tirth8205/code-review-graph`](https://github.com/tirth8205/code-review-graph).
-The current release intentionally retains the upstream CLI and package identifiers
-for compatibility while ForceGraph-specific integration layers are developed.
-
-### One-command integration
-
-Ask your coding agent to follow [AI_INSTALL.md](AI_INSTALL.md), or run:
+Run from a repository root:
 
 ```bash
-uvx --from "git+https://github.com/samansarmasik-alt/code-review-graph.git" forcegraph quickstart --platform codex --yes
+uvx --from "git+https://github.com/samansarmasik-alt/code-review-graph.git" forcegraph connect
 ```
 
-The command configures the selected AI platform, builds the graph, and writes a
-machine-readable readiness receipt to
-`.code-review-graph/quickstart-receipt.json`.
+ForceGraph auto-detects installed clients, safely merges their MCP settings,
+builds the graph, and writes a machine-readable receipt. It supports Codex,
+Claude Code, Cursor, Windsurf, Zed, Continue, OpenCode, Gemini CLI, Qwen Code,
+Qoder, Kiro, GitHub Copilot, and CodeBuddy.
 
-## Documentation
+Unknown or future MCP clients can use the generated
+`.code-review-graph/mcp-config.json` file. Copy its
+`mcpServers.code-review-graph` entry into the client's MCP configuration.
 
-- [ForceGraph roadmap](docs/FORCEGRAPH_ROADMAP.md)
+### Documentation
+
+- [Universal integrations](docs/INTEGRATIONS.md)
 - [AI installation contract](AI_INSTALL.md)
-- [Upstream README snapshot](docs/UPSTREAM_README.md)
 - [Usage guide](docs/USAGE.md)
-- [Command reference](docs/COMMANDS.md)
+- [Commands](docs/COMMANDS.md)
 - [Architecture](docs/architecture.md)
-- [Attribution and provenance](ATTRIBUTION.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
+- [Attribution](ATTRIBUTION.md)
+
+## Project status and provenance
+
+ForceGraph is an independent, tool-neutral development fork of the MIT-licensed
+[`tirth8205/code-review-graph`](https://github.com/tirth8205/code-review-graph).
+The upstream package and CLI names remain available for compatibility. New work
+is designed around open MCP contracts rather than a private dependency on any
+Force-branded product. See [ATTRIBUTION.md](ATTRIBUTION.md).
 
 ## Contributing
 
-Issues and pull requests are welcome. Please keep changes focused, include tests
-for behavioural changes, and clearly distinguish upstream compatibility work from
-ForceGraph-specific functionality. See [CONTRIBUTING.md](CONTRIBUTING.md).
+Issues and pull requests are welcome. Include tests for behavioural changes and
+preserve existing user configuration when changing installers. See
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-Licensed under the [MIT License](LICENSE). ForceGraph is derived from the
-MIT-licensed `code-review-graph` project; original copyright and license notices
-are preserved. See [ATTRIBUTION.md](ATTRIBUTION.md) for provenance details.
+[MIT](LICENSE)
