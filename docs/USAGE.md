@@ -1,6 +1,6 @@
 # Code Review Graph — User Guide
 
-**Applies to:** v2.4.0
+**Applies to:** v2.7.0
 
 ## Installation
 

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-07-22
+
 ### ForceGraph additions
 
 - Added Task Passports: one compact shared record for goal, status, owner,
