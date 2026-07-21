@@ -1,6 +1,7 @@
 """CLI entry point for code-review-graph.
 
 Usage:
+    forcegraph connect [--repo PATH]
     code-review-graph quickstart [--platform PLATFORM] [--repo PATH]
     code-review-graph install
     code-review-graph init
@@ -112,12 +113,13 @@ def _print_banner() -> None:
 
     print(f"""
 {c}  ●──●──●{r}
-{c}  │╲ │ ╱│{r}       {b}code-review-graph{r}  {d}v{version}{r}
+{c}  │╲ │ ╱│{r}       {b}ForceGraph{r}  {d}v{version}{r}
 {c}  ●──{y}◆{c}──●{r}
 {c}  │╱ │ ╲│{r}       {d}Structural knowledge graph for{r}
 {c}  ●──●──●{r}       {d}smarter code reviews{r}
 
   {b}Commands:{r}
+    {g}connect{r}     Auto-detect tools, connect MCP, build, and verify
     {g}install{r}     Set up MCP server for AI coding platforms
     {g}quickstart{r}  Install, build, and verify in one command
     {g}init{r}        Alias for install
@@ -148,11 +150,16 @@ def _instruction_files_to_modify(
     or modify, given the current state of the repo and the selected
     platform target. Used for the dry-run / confirm preview (#173).
     """
-    from .skills import _CLAUDE_MD_SECTION_MARKER, _PLATFORM_INSTRUCTION_FILES
+    from .skills import (
+        _CLAUDE_MD_SECTION_MARKER,
+        _PLATFORM_INSTRUCTION_FILES,
+        detect_platforms,
+    )
 
     targets: list[str] = []
+    active_targets = set(detect_platforms(repo_root)) if target == "all" else {target}
 
-    if target in ("claude", "all"):
+    if "claude" in active_targets:
         claude_md = repo_root / "CLAUDE.md"
         if claude_md.exists():
             content = claude_md.read_text(encoding="utf-8")
@@ -162,7 +169,7 @@ def _instruction_files_to_modify(
             targets.append("CLAUDE.md (new)")
 
     for filename, owners in _PLATFORM_INSTRUCTION_FILES.items():
-        if target != "all" and target not in owners:
+        if not active_targets.intersection(owners):
             continue
         path = repo_root / filename
         if path.exists():
@@ -199,7 +206,7 @@ def _confirm_yes_no(prompt: str, default_yes: bool = True) -> bool:
 def _handle_init(args: argparse.Namespace) -> dict[str, object]:
     """Set up MCP config for detected AI coding platforms."""
     from .incremental import ensure_repo_gitignore_excludes_crg, find_repo_root
-    from .skills import install_platform_configs
+    from .skills import detect_platforms, install_platform_configs
 
     repo_root = Path(args.repo) if args.repo else find_repo_root()
     if not repo_root:
@@ -209,6 +216,7 @@ def _handle_init(args: argparse.Namespace) -> dict[str, object]:
     target = getattr(args, "platform", "all") or "all"
     if target == "claude-code":
         target = "claude"
+    active_targets = set(detect_platforms(repo_root)) if target == "all" else {target}
     auto_yes = getattr(args, "yes", False)
     skip_instructions = getattr(args, "no_instructions", False)
 
@@ -253,7 +261,6 @@ def _handle_init(args: argparse.Namespace) -> dict[str, object]:
     # Legacy: --skills/--hooks/--all still accepted (no-op, everything is default)
 
     from .skills import (
-        PLATFORMS,
         generate_skills,
         inject_claude_md,
         inject_platform_instructions,
@@ -271,17 +278,17 @@ def _handle_init(args: argparse.Namespace) -> dict[str, object]:
 
     if not skip_skills:
         # Claude Code skills are only relevant for Claude (or full install).
-        if target in ("claude", "all"):
+        if "claude" in active_targets:
             skills_dir = generate_skills(repo_root)
             print(f"Generated Claude Code skills in {skills_dir}")
 
         # Gemini CLI skills are workspace-scoped under .gemini/.
-        if target in ("gemini-cli", "all"):
+        if "gemini-cli" in active_targets:
             gemini_skills_dir = install_gemini_cli_skills(repo_root)
             print(f"Installed Gemini CLI skills in {gemini_skills_dir}")
 
         # CodeBuddy discovers project skills under .codebuddy/skills/.
-        if target in ("codebuddy", "all"):
+        if "codebuddy" in active_targets:
             codebuddy_skills_dir = install_codebuddy_skills(repo_root)
             print(f"Installed CodeBuddy skills in {codebuddy_skills_dir}")
 
@@ -292,9 +299,10 @@ def _handle_init(args: argparse.Namespace) -> dict[str, object]:
             "Inject graph instructions into the files above?",
             default_yes=True,
         ):
-            if target in ("claude", "all"):
+            if "claude" in active_targets:
                 inject_claude_md(repo_root)
-            inject_platform_instructions(repo_root, target=target)
+            for active_target in sorted(active_targets - {"claude"}):
+                inject_platform_instructions(repo_root, target=active_target)
             # Use the precomputed instr_targets list for the confirmation
             # message; we don't need the fresh return value from
             # inject_platform_instructions here.
@@ -307,24 +315,25 @@ def _handle_init(args: argparse.Namespace) -> dict[str, object]:
 
 
     # Install Qoder skills (global user-level skills directory)
-    if not skip_skills and target in ("qoder", "all"):
+    if not skip_skills and "qoder" in active_targets:
         qoder_skills_dir = install_qoder_skills(repo_root)
         if qoder_skills_dir:
             print(f"Installed Qoder skills to {qoder_skills_dir}")
-    if not skip_hooks and target in ("codebuddy", "all"):
+    if not skip_hooks and "codebuddy" in active_targets:
         try:
             codebuddy_settings = install_codebuddy_hooks(repo_root)
             print(f"Installed CodeBuddy hooks in {codebuddy_settings}")
         except Exception as exc:
             logger.warning("Could not install CodeBuddy hooks: %s", exc)
-    if not skip_hooks and target in ("codex", "all"):
+    if not skip_hooks and "codex" in active_targets:
         hooks_path = install_codex_hooks(repo_root)
         print(f"Installed Codex hooks in {hooks_path}")
         git_hook = install_git_hook(repo_root)
         if git_hook:
             print(f"Installed git pre-commit hook in {git_hook}")
-    if not skip_hooks and target in ("claude", "qoder", "all"):
-        platforms_to_install = [target] if target != "all" else ["claude", "qoder"]
+    hook_targets = [key for key in ("claude", "qoder") if key in active_targets]
+    if not skip_hooks and hook_targets:
+        platforms_to_install = hook_targets
         for plat in platforms_to_install:
             install_hooks(repo_root, platform=plat)
             print(f"Installed hooks in {repo_root / f'.{plat}' / 'settings.json'}")
@@ -333,14 +342,14 @@ def _handle_init(args: argparse.Namespace) -> dict[str, object]:
             print(f"Installed git pre-commit hook in {git_hook}")
 
     # Cursor hooks (user-level, only if ~/.cursor exists — matching MCP detect)
-    if not skip_hooks and target in ("all", "cursor") and PLATFORMS["cursor"]["detect"]():
+    if not skip_hooks and "cursor" in active_targets:
         try:
             hooks_path = install_cursor_hooks()
             print(f"Installed Cursor hooks in {hooks_path}")
         except Exception as exc:
             logger.warning("Could not install Cursor hooks: %s", exc)
 
-    if not skip_hooks and target in ("gemini-cli", "all"):
+    if not skip_hooks and "gemini-cli" in active_targets:
         try:
             gemini_settings = install_gemini_cli_hooks(repo_root)
             print(f"Installed Gemini CLI hooks in {gemini_settings}")
@@ -348,7 +357,7 @@ def _handle_init(args: argparse.Namespace) -> dict[str, object]:
             logger.warning("Could not install Gemini CLI hooks: %s", exc)
 
     # OpenCode plugin (user-level, gated by same detect() as MCP config)
-    if not skip_hooks and target in ("all", "opencode") and PLATFORMS["opencode"]["detect"]():
+    if not skip_hooks and "opencode" in active_targets:
         try:
             plugin_path = install_opencode_plugin()
             print(f"Installed OpenCode plugin in {plugin_path}")
@@ -386,7 +395,8 @@ def _handle_quickstart(args: argparse.Namespace) -> dict[str, object]:
     args.yes = True
     args.quickstart = True
 
-    print("ForceGraph quickstart")
+    universal = getattr(args, "command", None) == "connect"
+    print("ForceGraph universal connect" if universal else "ForceGraph quickstart")
     print(f"Repository: {repo_root}")
     print()
 
@@ -427,6 +437,31 @@ def _handle_quickstart(args: argparse.Namespace) -> dict[str, object]:
             "postprocess": postprocess,
         }
 
+    universal_config_path: Path | None = None
+    if universal:
+        from .skills import PLATFORMS, _build_server_entry
+
+        # mcpServers is the most widely shared MCP client schema. Keeping this
+        # vendor-neutral file beside the graph gives unsupported/new clients a
+        # ready-to-copy stdio definition without adding another platform branch.
+        server = _build_server_entry(PLATFORMS["claude"], repo_root=repo_root)
+        universal_config_path = get_db_path(repo_root).parent / "mcp-config.json"
+        universal_config_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary_config = universal_config_path.with_suffix(".json.tmp")
+        temporary_config.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "mcpServers": {"code-review-graph": server},
+                },
+                indent=2,
+                ensure_ascii=False,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        os.replace(temporary_config, universal_config_path)
+
     receipt = {
         "schema_version": 1,
         "status": "ready",
@@ -434,11 +469,14 @@ def _handle_quickstart(args: argparse.Namespace) -> dict[str, object]:
         "configured_platforms": install_result["configured_platforms"],
         "graph": build_summary,
         "restart_required": bool(install_result["configured_platforms"]),
+        "auto_watch": universal,
         "next_prompt": (
-            "Use the ForceGraph MCP tools first. Inspect the architecture and "
-            "impact radius before editing code."
+            "ForceGraph auto-updates while the MCP client is running. Use its "
+            "tools first; inspect architecture and impact before editing code."
         ),
     }
+    if universal_config_path is not None:
+        receipt["universal_mcp_config"] = str(universal_config_path)
     receipt_path = get_db_path(repo_root).parent / "quickstart-receipt.json"
     receipt_path.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = receipt_path.with_suffix(".json.tmp")
@@ -461,11 +499,56 @@ def _handle_quickstart(args: argparse.Namespace) -> dict[str, object]:
     else:
         print("  Graph: skipped (--no-build)")
     print(f"  Receipt: {receipt_path}")
+    if universal_config_path is not None:
+        print(f"  Universal MCP config: {universal_config_path}")
     if receipt["restart_required"]:
         print("  Final step: restart your AI coding tool, then ask it to use ForceGraph.")
     else:
         print("  No AI platform was detected; the CLI graph is still ready to use.")
     return receipt
+
+
+def _add_onboarding_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add the shared zero-to-ready options used by connect and quickstart."""
+    parser.add_argument("--repo", default=None, help="Repository root (auto-detected)")
+    parser.add_argument(
+        "--platform",
+        choices=_PLATFORM_CHOICES,
+        default="all",
+        help="Target platform (default: all detected)",
+    )
+    parser.add_argument(
+        "--fast",
+        action="store_true",
+        help="Build with minimal post-processing for a faster first run",
+    )
+    parser.add_argument(
+        "--no-build",
+        action="store_true",
+        help="Install integrations without building the graph",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview installation and graph build without writing files",
+    )
+    parser.add_argument(
+        "--no-skills",
+        action="store_true",
+        help="Skip generating platform-native skill files",
+    )
+    parser.add_argument(
+        "--no-hooks",
+        action="store_true",
+        help="Skip installing platform-native hooks",
+    )
+    parser.add_argument(
+        "--no-instructions",
+        action="store_true",
+        help="Skip injecting graph-aware AI instruction files",
+    )
+    parser.add_argument("-y", "--yes", action="store_true", help=argparse.SUPPRESS)
+    parser.set_defaults(yes=True)
 
 
 def _handle_data_dir_option(args, repo_root: Path) -> None:
@@ -635,55 +718,23 @@ def _run_graph_tool_command(args, repo_root: Path) -> None:
 def main() -> None:
     """Main CLI entry point."""
     ap = argparse.ArgumentParser(
-        prog="code-review-graph",
-        description="Persistent incremental knowledge graph for code reviews",
+        prog="forcegraph" if Path(sys.argv[0]).name == "forcegraph" else "code-review-graph",
+        description="Universal local-first code intelligence for AI coding tools",
     )
     ap.add_argument("-v", "--version", action="store_true", help="Show version and exit")
     sub = ap.add_subparsers(dest="command")
+
+    connect_cmd = sub.add_parser(
+        "connect",
+        help="Auto-detect AI tools, connect MCP, build, and verify",
+    )
+    _add_onboarding_arguments(connect_cmd)
 
     quickstart_cmd = sub.add_parser(
         "quickstart",
         help="Install integrations, build the graph, and verify readiness",
     )
-    quickstart_cmd.add_argument("--repo", default=None, help="Repository root (auto-detected)")
-    quickstart_cmd.add_argument(
-        "--platform",
-        choices=_PLATFORM_CHOICES,
-        default="all",
-        help="Target platform (default: all detected)",
-    )
-    quickstart_cmd.add_argument(
-        "--fast",
-        action="store_true",
-        help="Build with minimal post-processing for a faster first run",
-    )
-    quickstart_cmd.add_argument(
-        "--no-build",
-        action="store_true",
-        help="Install integrations without building the graph",
-    )
-    quickstart_cmd.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Preview installation and graph build without writing files",
-    )
-    quickstart_cmd.add_argument(
-        "--no-skills",
-        action="store_true",
-        help="Skip generating platform-native skill files",
-    )
-    quickstart_cmd.add_argument(
-        "--no-hooks",
-        action="store_true",
-        help="Skip installing platform-native hooks",
-    )
-    quickstart_cmd.add_argument(
-        "--no-instructions",
-        action="store_true",
-        help="Skip injecting graph-aware AI instruction files",
-    )
-    quickstart_cmd.add_argument("-y", "--yes", action="store_true", help=argparse.SUPPRESS)
-    quickstart_cmd.set_defaults(yes=True)
+    _add_onboarding_arguments(quickstart_cmd)
 
     # install (primary) + init (alias)
     install_cmd = sub.add_parser("install", help="Register MCP server with AI coding platforms")
@@ -1474,7 +1525,7 @@ def main() -> None:
             raise SystemExit(1)
         return
 
-    if args.command == "quickstart":
+    if args.command in ("connect", "quickstart"):
         _handle_quickstart(args)
         return
 

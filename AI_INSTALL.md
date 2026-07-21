@@ -10,7 +10,19 @@ Install the ForceGraph CLI, configure the current AI coding platform, build the
 local code graph, and verify the generated receipt. Do not report success until
 the receipt says `"status": "ready"`.
 
-## 1. Select the platform
+## 1. Prefer automatic connection
+
+Do not ask the user which coding tool they use unless automatic detection fails.
+From the target repository root, run:
+
+```bash
+uvx --from "git+https://github.com/samansarmasik-alt/code-review-graph.git" forcegraph connect
+```
+
+This detects installed tools and also writes a vendor-neutral configuration for
+unknown MCP clients. To force one environment, use the values below.
+
+## 2. Optional explicit platform
 
 Use the platform matching your current environment:
 
@@ -29,12 +41,12 @@ Use the platform matching your current environment:
 | CodeBuddy Code | `codebuddy` |
 | Unknown or multiple tools | `all` |
 
-## 2. Run one command from the target repository root
+## 3. Fallback installation
 
 Prefer `uvx` when available:
 
 ```bash
-uvx --from "git+https://github.com/samansarmasik-alt/code-review-graph.git" forcegraph quickstart --platform PLATFORM --yes
+uvx --from "git+https://github.com/samansarmasik-alt/code-review-graph.git" forcegraph connect --platform PLATFORM
 ```
 
 Replace `PLATFORM` with the value selected above. If `uvx` is unavailable, use
@@ -42,7 +54,7 @@ Python 3.10 or newer:
 
 ```bash
 python -m pip install "git+https://github.com/samansarmasik-alt/code-review-graph.git"
-python -m code_review_graph quickstart --platform PLATFORM --yes
+python -m code_review_graph connect --platform PLATFORM
 ```
 
 On Windows, use `py` instead of `python` when that is the available launcher.
@@ -50,7 +62,7 @@ On Windows, use `py` instead of `python` when that is the available launcher.
 For a very large repository, `--fast` is allowed on the first run. It keeps the
 structural graph and search index but skips expensive flow/community analysis.
 
-## 3. Verify, do not guess
+## 4. Verify, do not guess
 
 Read:
 
@@ -65,6 +77,7 @@ Success requires all of the following:
 - `graph.files` is greater than zero for a repository containing supported source files.
 - The selected platform appears in `configured_platforms`, or you clearly tell
   the user that only CLI mode was configured.
+- `.code-review-graph/mcp-config.json` exists when `connect` was used.
 
 Then run:
 
@@ -74,7 +87,7 @@ forcegraph status
 
 If the executable is not on `PATH`, use `python -m code_review_graph status`.
 
-## 4. Hand off honestly
+## 5. Hand off honestly
 
 Tell the user:
 

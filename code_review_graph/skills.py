@@ -21,6 +21,11 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+_FORCEGRAPH_UVX_SOURCE = os.environ.get(
+    "FORCEGRAPH_UVX_SOURCE",
+    "git+https://github.com/samansarmasik-alt/code-review-graph.git",
+)
+
 
 # --- Multi-platform MCP install ---
 
@@ -54,7 +59,7 @@ PLATFORMS: dict[str, dict[str, Any]] = {
         "name": "Claude Code",
         "config_path": lambda root: root / ".mcp.json",
         "key": "mcpServers",
-        "detect": lambda: True,
+        "detect": lambda: bool(shutil.which("claude")) or (Path.home() / ".claude").exists(),
         "format": "object",
         "needs_type": True,
     },
@@ -94,7 +99,8 @@ PLATFORMS: dict[str, dict[str, Any]] = {
         "name": "OpenCode",
         "config_path": _opencode_config_path,
         "key": "mcp",
-        "detect": lambda: True,
+        "detect": lambda: bool(shutil.which("opencode"))
+        or (Path.home() / ".config" / "opencode").exists(),
         "format": "object",
         "needs_type": False,
     },
@@ -134,7 +140,7 @@ PLATFORMS: dict[str, dict[str, Any]] = {
         "name": "Qoder",
         "config_path": lambda root: root / ".qoder" / "mcp.json",
         "key": "mcpServers",
-        "detect": lambda: True,
+        "detect": lambda: bool(shutil.which("qoder")) or (Path.home() / ".qoder").exists(),
         "format": "object",
         "needs_type": True,
     },
@@ -158,11 +164,31 @@ PLATFORMS: dict[str, dict[str, Any]] = {
         "name": "CodeBuddy Code",
         "config_path": lambda root: root / ".mcp.json",
         "key": "mcpServers",
-        "detect": lambda: True,
+        "detect": lambda: bool(shutil.which("codebuddy"))
+        or (Path.home() / ".codebuddy").exists(),
         "format": "object",
         "needs_type": True,
     },
 }
+
+
+def detect_platforms(repo_root: Path) -> dict[str, dict[str, Any]]:
+    """Return installed clients using user-level signals and project markers."""
+    detected = {key: value for key, value in PLATFORMS.items() if value["detect"]()}
+    workspace_markers = {
+        "claude": (".claude", "CLAUDE.md", ".mcp.json"),
+        "cursor": (".cursor", ".cursorrules"),
+        "opencode": ("opencode.json", "opencode.jsonc"),
+        "gemini-cli": (".gemini", "GEMINI.md"),
+        "qoder": (".qoder", "QODER.md"),
+        "codebuddy": (".codebuddy", "CODEBUDDY.md"),
+        "copilot": (".vscode", ".github/copilot-instructions.md"),
+        "kiro": (".kiro",),
+    }
+    for key, markers in workspace_markers.items():
+        if key not in detected and any((repo_root / marker).exists() for marker in markers):
+            detected[key] = PLATFORMS[key]
+    return detected
 
 
 def _in_poetry_project() -> bool:
@@ -213,14 +239,14 @@ def _detect_serve_command() -> tuple[str, list[str]]:
     ------------------
     1. **Poetry** – ``POETRY_ACTIVE=1`` OR ``VIRTUAL_ENV`` contains ``"pypoetry"``
        (covers both ``poetry shell`` and ``poetry run``) and ``poetry`` is on PATH
-       → ``poetry run code-review-graph serve``
+       → ``poetry run code-review-graph serve --auto-watch``
     2. **uv project** – ``UV_PROJECT_ENVIRONMENT`` is set, or a ``uv.lock``
        ancestor is found alongside ``sys.executable``, and ``uv`` is on PATH
-       → ``uv run code-review-graph serve``
-    3. **uvx** – ``uvx`` is available on PATH (existing behaviour, unchanged)
-       → ``uvx code-review-graph serve``
+       → ``uv run code-review-graph serve --auto-watch``
+    3. **uvx** – ``uvx`` is available on PATH
+       → run the maintained ForceGraph source through ``uvx --from``
     4. **Fallback** – use the absolute path of the running Python interpreter
-       → ``sys.executable -m code_review_graph serve``
+       → ``sys.executable -m code_review_graph serve --auto-watch``
 
     The fallback is always safe: ``sys.executable`` is the exact interpreter
     that is currently running, so it resolves correctly inside any virtual
@@ -230,20 +256,24 @@ def _detect_serve_command() -> tuple[str, list[str]]:
     if _in_poetry_project():
         poetry = shutil.which("poetry")
         if poetry:
-            return ("poetry", ["run", "code-review-graph", "serve"])
+            return ("poetry", ["run", "code-review-graph", "serve", "--auto-watch"])
 
     # 2. uv managed project environment
     if os.environ.get("UV_PROJECT_ENVIRONMENT") or _in_uv_project():
         uv = shutil.which("uv")
         if uv:
-            return ("uv", ["run", "code-review-graph", "serve"])
+            return ("uv", ["run", "code-review-graph", "serve", "--auto-watch"])
 
-    # 3. uvx global tool runner (existing behaviour, unchanged)
+    # 3. uvx global tool runner. Pin the maintained fork instead of resolving
+    # the separate upstream package from PyPI.
     if shutil.which("uvx"):
-        return ("uvx", ["code-review-graph", "serve"])
+        return (
+            "uvx",
+            ["--from", _FORCEGRAPH_UVX_SOURCE, "forcegraph", "serve", "--auto-watch"],
+        )
 
     # 4. Absolute-path fallback using the running interpreter
-    return (sys.executable, ["-m", "code_review_graph", "serve"])
+    return (sys.executable, ["-m", "code_review_graph", "serve", "--auto-watch"])
 
 
 def _build_server_entry(
@@ -426,10 +456,7 @@ def install_platform_configs(
     """
     shared_aliases: dict[str, tuple[str, ...]] = {}
     if target == "all":
-        platforms_to_install = {k: v for k, v in PLATFORMS.items() if v["detect"]()}
-        # Workspace-level Kiro detection
-        if "kiro" not in platforms_to_install and (repo_root / ".kiro").is_dir():
-            platforms_to_install["kiro"] = PLATFORMS["kiro"]
+        platforms_to_install = detect_platforms(repo_root)
 
         # Claude Code and CodeBuddy intentionally share the official project
         # .mcp.json/mcpServers contract. Process that exact pair once, but do

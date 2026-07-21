@@ -11,6 +11,7 @@ tests, documentation, and compatibility checks are complete.
 - [x] Retain upstream CLI compatibility during the transition
 - [x] Record the initial upstream baseline
 - [x] Add a one-command, AI-readable installation and verification flow
+- [x] Add tool-neutral auto-detection and a vendor-neutral MCP manifest
 - [ ] Add a dedicated ForceGraph release and compatibility policy
 
 ## Phase 1 — Context bundle protocol
@@ -22,13 +23,13 @@ tests, documentation, and compatibility checks are complete.
 - [ ] Add secret and ignored-file filtering before bundle generation
 - [ ] Expose bundle generation through CLI and MCP
 
-## Phase 2 — ForceCode integration
+## Phase 2 — Universal agent integration
 
-- [ ] Add `/graph`, `/impact`, and `/review` ForceCode commands
-- [ ] Connect graph results to ForceContext candidate retrieval
-- [ ] Send evidence and test gaps to the Execution Kernel
-- [ ] Persist graph version and context receipt in `last-run.json`
+- [ ] Publish portable context bundle and review JSON schemas
+- [ ] Add adapter examples for generic MCP clients and agent frameworks
+- [ ] Expose graph freshness and capability negotiation through MCP
 - [ ] Support graceful fallback when the graph is missing or stale
+- [ ] Keep all vendor-specific adapters optional and independently testable
 
 ## Phase 3 — Review intelligence
 

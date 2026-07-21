@@ -68,7 +68,8 @@ source ~/.zshrc
 | MCP server config (`.mcp.json`) | Project-scoped | Claude Code launches one MCP server per project, with `cwd=<project>` |
 | Multi-repo registry           | User-scoped    | `~/.code-review-graph/registry.json` (only for `cross_repo_search`) |
 
-**TL;DR**: install the tool **once**, then run `code-review-graph install && code-review-graph build` inside **each** project you want graph-aware reviews in.
+**TL;DR**: run `forcegraph connect` once inside each project you want
+graph-aware reviews in. The AI client starts auto-watch afterward.
 
 ### 4. Using a venv? You must update `settings.json` manually
 
@@ -82,7 +83,7 @@ Claude Code hooks and MCP tool paths in `.claude/settings.json` are **hardcoded 
   "mcpServers": {
     "code-review-graph": {
       "command": "/path/to/your/venv/bin/uvx",
-      "args": ["code-review-graph", "serve"]
+      "args": ["code-review-graph", "serve", "--auto-watch"]
     }
   }
 }
@@ -142,7 +143,7 @@ The graph uses SQLite with WAL mode. If you see lock errors:
 - Run with `full_rebuild=True` to force a complete re-parse
 
 ## Graph seems stale
-- Hooks auto-update on edit/commit
+- The MCP server auto-updates while the AI client is running
 - If stale, run `/code-review-graph:build-graph` manually
 - Check that hooks are configured in `.claude/settings.json` (re-run `code-review-graph install` to regenerate)
 
@@ -153,8 +154,8 @@ The graph uses SQLite with WAL mode. If you see lock errors:
 
 ## MCP server won't start
 - Verify `uv` is installed (`uv --version`; install with `pip install uv` or `brew install uv`)
-- Check that `uvx code-review-graph serve` runs without errors
-- If using a custom `.mcp.json`, ensure it uses `"command": "uvx"` with `"args": ["code-review-graph", "serve"]`
+- Check that the generated command in `.code-review-graph/mcp-config.json` runs without errors
+- If using a custom MCP config, include `--auto-watch` after the `serve` argument
 - Re-run `code-review-graph install` to regenerate the config
 
 ## Windows / WSL
