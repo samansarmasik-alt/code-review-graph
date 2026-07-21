@@ -4,6 +4,14 @@
 
 ### ForceGraph additions
 
+- Rewrote the README around plain-language outcomes, a 30-second setup, concrete
+  examples, an honest upstream comparison, multi-agent behavior, limitations,
+  and a clear token-savings explanation.
+- Removed manual identity work from shared memory: task identity now resolves
+  from explicit input, `FORCEGRAPH_TASK_ID`, git branch, then workspace; agent
+  identity resolves from session environment variables and finally process ID.
+- Context and memory tools return resolved identities for transparent debugging.
+
 - Added local shared agent memory for concurrent terminal agents, backed by a
   separate SQLite WAL database with task isolation, TTL cleanup, bounded reads,
   and common-secret redaction.

@@ -21,6 +21,7 @@ tests, documentation, and compatibility checks are complete.
 - [ ] Enforce configurable response token and file budgets
 - [ ] Add deterministic receipts explaining why every context item was selected
 - [x] Add bounded local shared memory and handoffs for concurrent terminal agents
+- [x] Auto-resolve shared-memory task and agent identity without user commands
 - [ ] Add secret and ignored-file filtering before bundle generation
 - [x] Expose bilingual task-routed compact context through MCP
 - [ ] Expose versioned portable bundle generation through CLI and MCP

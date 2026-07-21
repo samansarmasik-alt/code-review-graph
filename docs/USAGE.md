@@ -61,14 +61,13 @@ runtime so committed settings do not contain one developer's checkout path.
 
 ## Shared memory for parallel agents
 
-Agents in separate terminals can exchange bounded local notes:
-
-- `forcegraph_memory_tool(action="write", agent_id="worker-1", task_id="issue-42", content="...")`
-- `forcegraph_memory_tool(action="handoff", agent_id="worker-1", task_id="issue-42", content="...")`
-- `forcegraph_memory_tool(action="read", agent_id="worker-2", task_id="issue-42")`
+Agents in separate terminals automatically share bounded local notes when they
+work in the same repository and branch. Agent and task identities resolve from
+explicit values, ForceGraph environment variables, the current git branch, and
+finally a safe workspace fallback. Manual IDs remain optional.
 
 Normal `forcegraph_context_tool` calls automatically include recent memory for
-the same task. Entries expire by default, common secret assignments are redacted,
+the resolved task. Entries expire by default, common secret assignments are redacted,
 and response size is bounded so shared memory does not become a second transcript.
 
 ## Core Workflow

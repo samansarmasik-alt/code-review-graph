@@ -2,16 +2,16 @@
 
 # ForceGraph
 
-### One local code graph. Every AI coding tool.
+### AI kodlama araçları için kur–unut kod bağlamı ve ortak agent hafızası
 
-ForceGraph maps your repository once, then gives any MCP-capable coding agent
-the smallest useful architecture, impact, test, and review context.
+Projeyi bir kez haritalar; AI’ya bütün repoyu okutmak yerine yalnızca gerekli
+kodu, ilişkileri, testleri ve diğer agent’ların kısa handoff notlarını verir.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-F4C430.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg)](https://www.python.org/)
 [![MCP](https://img.shields.io/badge/MCP-universal-8A2BE2.svg)](https://modelcontextprotocol.io/)
 
-[Türkçe](#türkçe) · [English](#english) · [Integrations](docs/INTEGRATIONS.md) · [Roadmap](docs/FORCEGRAPH_ROADMAP.md)
+[Türkçe](#türkçe) · [English](#english) · [Kurulum](#30-saniyelik-kurulum) · [Dokümantasyon](docs/INDEX.md)
 
 </div>
 
@@ -19,41 +19,156 @@ the smallest useful architecture, impact, test, and review context.
 
 ## Türkçe
 
-ForceGraph herhangi bir AI kodlama aracının projeyi tekrar tekrar baştan
-okumasını önleyen, yerel çalışan bir kod zekâsı katmanıdır. Fonksiyonları,
-sınıfları, importları, çağrıları, testleri ve çalışma akışlarını SQLite tabanlı
-bir grafa dönüştürür. Kaynak kodunuz yüklenmez.
+### En kısa anlatım
 
-### Tek komut, araç seçmek yok
+ForceGraph beş işi otomatik yapar:
 
-Proje klasöründe çalıştırın:
+1. Projeyi yerel kod grafına dönüştürür.
+2. Türkçe veya İngilizce soruyu anlayıp doğru graf sorgusunu seçer.
+3. AI’ya yalnızca görevle ilgili küçük bağlamı verir.
+4. Aynı projedeki agent’ların karar ve handoff notlarını paylaşır.
+5. Dosyalar değiştikçe grafı güncel tutar.
+
+Kaynak kod ve ortak hafıza yerelde kalır.
+
+### 30 saniyelik kurulum
+
+Proje klasöründe bir kez çalıştırın:
 
 ```bash
 uvx --from "git+https://github.com/samansarmasik-alt/code-review-graph.git" forcegraph connect
 ```
 
-`connect` kurulu AI araçlarını otomatik algılar, mevcut MCP ayarlarını bozmadan
-ForceGraph'ı ekler, kod grafını oluşturur ve sonucu doğrular. Codex, Claude Code,
-Cursor, Windsurf, Zed, Continue, OpenCode, Gemini CLI, Qwen Code, Qoder, Kiro,
-GitHub Copilot ve CodeBuddy desteklenir.
+Hepsi bu. Komut AI araçlarını algılar, MCP ayarını güvenle birleştirir, grafı
+oluşturur, otomatik takibi açar ve sonucu
+`.code-review-graph/quickstart-receipt.json` dosyasında doğrular.
 
-Bu işlem yalnızca bir kez yapılır. Sonrasında AI aracı ForceGraph MCP sunucusunu
-otomatik başlatır; `--auto-watch` dosya değişikliklerini kendiliğinden indeksler.
-Günlük kullanım için `build`, `update` veya `watch` komutu çalıştırmanız gerekmez.
-Kurulum ayrıca yalnızca dört agent aracına sahip kompakt MCP geçidini etkinleştirir.
-Bunlardan `forcegraph_memory_tool`, aynı repo üzerinde çalışan farklı terminal
-ve agent süreçlerinin karar, bulgu ve handoff notlarını yerel SQLite üzerinden
-paylaşmasını sağlar.
-Agent doğal görev cümlenizi `forcegraph_context_tool` aracına verir; araç Türkçe ve
-İngilizce niyeti algılayıp arama, mimari, etki, ilişki veya inceleme bağlamını
-düşük ayrıntıyla kendisi seçer.
-Böylece onlarca kullanılmayan araç şeması her agent turunda tekrar taşınmaz.
-İhtiyaç hâlinde `forcegraph serve --tool-profile full` ile bütün araçlar açılabilir.
+Codex, Claude Code, Cursor, Windsurf, Zed, Continue, OpenCode, Gemini CLI,
+Qwen Code, Qoder, Kiro, GitHub Copilot ve CodeBuddy desteklenir. Tanınmayan MCP
+istemcileri için de hazır `.code-review-graph/mcp-config.json` üretilir.
 
-Tanımadığımız yeni bir MCP istemcisi için de
-`.code-review-graph/mcp-config.json` dosyası üretilir. Bu dosyadaki
-`mcpServers.code-review-graph` nesnesini istemcinin MCP ayarına kopyalamak
-yeterlidir.
+AI agent’ına da yaptırabilirsiniz:
+
+> Bu repoya ForceGraph’ı bağla:
+> https://github.com/samansarmasik-alt/code-review-graph  
+> AI_INSTALL.md dosyasını uygula. Receipt ready olmadan tamamlandı sayma.
+
+### Siz sorarsınız, ForceGraph seçer
+
+| Söylediğiniz | Arka planda yapılan |
+| --- | --- |
+| “Bu proje ne yapıyor?” | Küçük mimari özeti |
+| “Login hatasını bul” | İlgili sembol ve ilişki araması |
+| “Bu değişiklik nereyi bozar?” | Etki alanı ve bağımlılar |
+| “Bu fonksiyonu kim kullanıyor?” | Çağıranlar ve ilgili testler |
+| “Değişiklikleri incele” | Diff, risk ve test bağlamı |
+
+MCP aracını veya graf komutunu sizin seçmeniz gerekmez.
+
+### Neden yalnızca dört araç?
+
+Çok sayıda MCP aracını her oturumda modele göstermek araç şeması bağlamını
+büyütebilir. ForceGraph normal kullanımda yalnızca şunları gösterir:
+
+| Araç | Ne yapar? |
+| --- | --- |
+| `forcegraph_context_tool` | Soruyu anlayıp doğru küçük bağlamı getirir |
+| `forcegraph_memory_tool` | Agent kararlarını ve handoff’ları paylaşır |
+| `detect_changes_tool` | Derin değişiklik/risk incelemesi yapar |
+| `build_or_update_graph_tool` | Eksik veya eski grafı onarır |
+
+Gelişmiş araçlar kaldırılmadı:
+`forcegraph serve --tool-profile full`.
+
+### Çoklu terminal hafızası nasıl çalışır?
+
+Aynı repo ve branch üzerinde çalışan agent’lar otomatik olarak aynı görev
+hafızasını kullanır. `task_id` veya `agent_id` yazmanız gerekmez.
+
+```mermaid
+flowchart TD
+    A["Agent 1: araştırma"] --> M[("Yerel ortak hafıza")]
+    B["Agent 2: kodlama"] --> M
+    C["Agent 3: test"] --> M
+    M --> G["ForceGraph bağlamı"]
+```
+
+Bütün konuşmalar saklanmaz. Yalnızca kısa karar, bulgu, not ve handoff kayıtları
+paylaşılır. Normal bağlam çağrısı ilgili son kayıtları otomatik görür.
+
+Görev kimliği sırası:
+
+1. Açıkça verilen `task_id`
+2. `FORCEGRAPH_TASK_ID`
+3. Mevcut git branch’i
+4. Git yoksa çalışma alanı
+
+Agent kimliği de desteklenen session ortam değişkenlerinden otomatik çözülür.
+Kayıtlar varsayılan 72 saatte sona erer, okuma boyutu sınırlıdır ve yaygın
+API anahtarı/parola/token biçimleri yazılmadan maskelenir.
+
+> Farklı makinelerde veya ortak klasörü olmayan izole konteynerlerde yerel hafıza
+> otomatik paylaşılmaz.
+
+### Neden upstream yerine ForceGraph?
+
+ForceGraph, MIT lisanslı
+[`tirth8205/code-review-graph`](https://github.com/tirth8205/code-review-graph)
+motorunu kullanır. Graf motorunu yeniden icat ettiğimizi iddia etmiyoruz.
+Farkımız, motoru agent uygulamalarında zahmetsiz bir bağlam geçidine çevirmektir.
+
+| İhtiyaç | Upstream | ForceGraph |
+| --- | --- | --- |
+| Uzman graf araçlarını elle yönetmek | Daha uygun | Tam profilde mümkün |
+| Tek komut bağlantı | Seçenekler mevcut | Otomatik algılama + receipt |
+| Türkçe doğal görev | Minimal başlangıç | Türkçe/İngilizce router |
+| Küçük MCP yüzeyi | Filtrelenebilir | Varsayılan dört araç |
+| Çoklu terminal hafızası | Temel özellik değil | Yerleşik ve branch tabanlı |
+| Bilinmeyen istemci | Manuel MCP | Hazır taşınabilir manifest |
+| Güncellik | Hook/watch seçenekleri | Bağlantıda otomatik watch |
+
+Kısaca: grafı elle ve ayrıntılı kontrol etmek için upstream; “repoya bağlan ve
+doğru bağlamı kendin seç” deneyimi için ForceGraph.
+
+### Token konusunda dürüst açıklama
+
+Upstream motor benchmark’ı bütün corpus karşılaştırmasında soru başına medyan
+yaklaşık **82×** daha küçük graf bağlamı bildirir
+([metodoloji](docs/REPRODUCING.md)). Bu toplam sohbet maliyeti değildir.
+
+ForceGraph ayrıca araç yüzeyini dörde indirir ve ortak hafızayı sınırlar. Ancak
+bu ek kazanç için henüz bağımsız v2.6 model benchmark’ı yayımlamadık; ölçmeden
+kesin yüzde söylemiyoruz.
+
+Azalabilenler:
+
+- tekrar okunan repo dosyaları,
+- gereksiz MCP araç şemaları,
+- agent’ların tekrarladığı araştırmalar.
+
+Sistem mesajı, konuşma geçmişi, model düşünmesi ve cevap tokenleri devam eder.
+Küçük tek dosyalı işlerde kazanç az olabilir.
+
+### Kimler kullanmalı?
+
+**Uygun:** orta/büyük repo, birden fazla agent, Türkçe görevler, MCP ayrıntılarıyla
+uğraşmak istemeyen ekipler ve yerel veri isteyen projeler.
+
+**Şimdilik uygun değil:** birkaç dosyalı script, MCP/terminal desteklemeyen agent
+ve farklı makineler arasında bulut hafızası gereken ekipler.
+
+<details>
+<summary><strong>Manuel komutlar ve yerel dosyalar</strong></summary>
+
+Günlük kullanımda gerekmez:
+
+```bash
+forcegraph status
+forcegraph update
+forcegraph detect-changes --brief
+forcegraph visualize
+forcegraph serve --tool-profile full
+```
 
 `uvx` yoksa:
 
@@ -62,159 +177,41 @@ python -m pip install "git+https://github.com/samansarmasik-alt/code-review-grap
 forcegraph connect
 ```
 
-AI aracına yaptırmak isterseniz yalnızca şunu söyleyin:
+Yerel durum:
 
-> Bu repoya ForceGraph'ı bağla. AI_INSTALL.md dosyasını uygula ve receipt hazır
-> olmadan işlemi tamamlandı sayma.
+- `.code-review-graph/graph.db`
+- `.code-review-graph/agent-memory.db`
+- `.code-review-graph/mcp-config.json`
+- `.code-review-graph/quickstart-receipt.json`
 
-### Neden upstream yerine ForceGraph?
+</details>
 
-ForceGraph, `tirth8205/code-review-graph` motorunu ve MIT lisanslı temelini
-korur. Farkımız grafı yeniden icat etmek değil, grafı her agent için yorucu
-ayarlar gerektirmeyen bir bağlam geçidine dönüştürmektir.
+### Dokümantasyon
 
-| Konu | Upstream code-review-graph | ForceGraph |
-| --- | --- | --- |
-| Yerel yapısal kod grafı | Var | Var; uyumlu temel |
-| İlk kurulum | Platform/komut seçilebilir | Tek `forcegraph connect`, otomatik algılama |
-| Güncellik | Hook/watch seçenekleri | Bağlı istemcide otomatik watch |
-| Agent araç yüzeyi | Geniş uzman araç seti | Varsayılan 4 araçlık kompakt geçit |
-| Doğal görev yönlendirme | Minimal başlangıç bağlamı | Türkçe/İngilizce niyet → doğru sorgu |
-| Bilinmeyen MCP istemcisi | Manuel yapılandırılabilir | Taşınabilir MCP manifesti üretir |
-| Kurulum kanıtı | Durum komutları | Makine-okunur `ready` receipt |
-
-Tam analiz yüzeyini tek tek kontrol etmek isteyen uzmanlar upstream veya
-`--tool-profile full` kullanabilir. “Repoya bağla ve kendisi doğru bağlamı
-seçsin” isteyen agent uygulamaları için ForceGraph daha uygun katmandır.
-
-### Çoklu agent ortak hafızası
-
-Aynı proje üzerinde çalışan terminal agent’ları ortak bir `task_id` kullanır.
-Her agent kısa bir karar, bulgu veya handoff bırakabilir; diğer agent’ın normal
-`forcegraph_context_tool` çağrısı ilgili son kayıtları otomatik görür.
-
-- Ayrı servis ve hesap gerektirmez; repo içindeki yerel SQLite WAL kullanılır.
-- Eşzamanlı terminal süreçlerine uygundur.
-- Kayıtlar varsayılan 72 saatte sona erer ve okuma çıktısı sınırlandırılır.
-- Yaygın token, parola ve API anahtarı atamaları yazılmadan önce maskelenir.
-- Grafik verisi gibi `.code-review-graph/` altında kalır ve commit edilmez.
-
-Bu, agent’ların tüm konuşma geçmişini birbirine kopyalamaz. Yalnızca işe yarayan
-kısa kararları ve handoff’ları paylaşarak bağlam şişmesini önler.
-
-### Ne kazandırır?
-
-- **Daha az token:** Agent, tüm repo yerine ilgili sembolleri ve ilişkileri alır.
-- **Daha güvenli değişiklik:** Bir fonksiyonun çağıranları, testleri ve etki alanı
-  değişiklikten önce görülebilir.
-- **Tek grafik, çok araç:** Aynı yerel veri Codex, Claude Code, Cursor ve diğer
-  MCP istemcileri tarafından kullanılabilir.
-- **Artımlı güncelleme:** Yalnızca değişen dosyalar yeniden işlenir.
-- **Gizlilik:** Temel özellikler internete kod göndermez ve harici veritabanı
-  istemez.
-
-```mermaid
-flowchart LR
-    A[Repository] --> B[ForceGraph]
-    B --> C[(Local SQLite graph)]
-    C --> D[MCP]
-    D --> E[Your AI tool]
-```
-
-### Günlük kullanım
-
-Aşağıdaki komutlar yalnızca manuel inceleme ve hata ayıklama içindir; zorunlu
-değildir:
-
-```bash
-forcegraph status
-forcegraph update
-forcegraph detect-changes --brief
-forcegraph visualize
-forcegraph watch
-```
-
-Belirli bir aracı zorlamak hâlâ mümkündür:
-
-```bash
-forcegraph connect --platform codex
-forcegraph connect --platform claude-code
-forcegraph connect --platform cursor
-forcegraph install --platform codebuddy
-```
-
-İsteğe bağlı analiz paketleri:
-
-```bash
-pip install "code-review-graph[embeddings]"
-pip install "code-review-graph[google-embeddings]"
-pip install "code-review-graph[communities]"
-pip install "code-review-graph[enrichment]"
-pip install "code-review-graph[eval]"
-pip install "code-review-graph[wiki]"
-pip install "code-review-graph[all]"
-```
-
-Kurulum sonunda iki taşınabilir dosya oluşur:
-
-- `.code-review-graph/quickstart-receipt.json` — doğrulanmış kurulum sonucu;
-- `.code-review-graph/mcp-config.json` — genel MCP bağlantı tanımı.
+[AI kurulumu](AI_INSTALL.md) · [Entegrasyonlar](docs/INTEGRATIONS.md) ·
+[Kullanım](docs/USAGE.md) · [Komutlar](docs/COMMANDS.md) ·
+[Mimari](docs/architecture.md) · [Yol haritası](docs/FORCEGRAPH_ROADMAP.md) ·
+[Atıf](ATTRIBUTION.md)
 
 ---
 
 ## English
 
-ForceGraph is a local-first code intelligence layer for any AI coding tool. It
-indexes functions, classes, imports, calls, tests, and execution flows once, then
-serves focused context through MCP instead of making every agent reread the
-whole repository.
-
-### One command, no tool selection
-
-Run from a repository root:
+ForceGraph is a local-first context gateway built on the MIT-licensed
+`tirth8205/code-review-graph` engine. It adds one-command client detection,
+auto-watch, a four-tool compact MCP surface, Turkish/English task routing,
+installation receipts, and bounded shared memory for parallel terminal agents.
 
 ```bash
 uvx --from "git+https://github.com/samansarmasik-alt/code-review-graph.git" forcegraph connect
 ```
 
-ForceGraph auto-detects installed clients, safely merges their MCP settings,
-builds the graph, and writes a machine-readable receipt. It supports Codex,
-Claude Code, Cursor, Windsurf, Zed, Continue, OpenCode, Gemini CLI, Qwen Code,
-Qoder, Kiro, GitHub Copilot, and CodeBuddy.
+After installation, ask normal coding questions. Agent and task identities are
+resolved automatically from session environment and git branch. Use
+`--tool-profile full` only for the expert surface.
 
-Connected clients use a four-tool context gateway by default. The
-`forcegraph_context_tool` routes English or Turkish tasks to compact search,
-architecture, impact, relationship, or review context. The full surface remains
-available with
-`forcegraph serve --tool-profile full`.
-
-Unknown or future MCP clients can use the generated
-`.code-review-graph/mcp-config.json` file. Copy its
-`mcpServers.code-review-graph` entry into the client's MCP configuration.
-
-### Documentation
-
-- [Universal integrations](docs/INTEGRATIONS.md)
-- [AI installation contract](AI_INSTALL.md)
-- [Usage guide](docs/USAGE.md)
-- [Commands](docs/COMMANDS.md)
-- [Architecture](docs/architecture.md)
-- [Troubleshooting](docs/TROUBLESHOOTING.md)
-- [Attribution](ATTRIBUTION.md)
-
-## Project status and provenance
-
-ForceGraph is an independent, tool-neutral development fork of the MIT-licensed
-[`tirth8205/code-review-graph`](https://github.com/tirth8205/code-review-graph).
-The upstream package and CLI names remain available for compatibility. New work
-is designed around open MCP contracts rather than a private dependency on any
-Force-branded product. See [ATTRIBUTION.md](ATTRIBUTION.md).
-
-## Contributing
-
-Issues and pull requests are welcome. Include tests for behavioural changes and
-preserve existing user configuration when changing installers. See
-[CONTRIBUTING.md](CONTRIBUTING.md).
+See [integrations](docs/INTEGRATIONS.md), [usage](docs/USAGE.md),
+[AI install contract](AI_INSTALL.md), and [attribution](ATTRIBUTION.md).
 
 ## License
 
