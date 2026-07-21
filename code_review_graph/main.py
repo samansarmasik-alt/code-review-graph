@@ -18,6 +18,7 @@ from typing import Optional
 from fastmcp import FastMCP
 
 from . import incremental as _incremental
+from .agent_memory import publish_agent_memory, read_agent_memory
 from .graph import GraphStore
 from .incremental import find_project_root, get_db_path, start_watch_thread
 from .prompts import (
@@ -92,6 +93,203 @@ mcp = FastMCP(
         "builds a structural graph, and provides smart impact analysis."
     ),
 )
+
+
+_CONTEXT_INTENT_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "review": (
+        "review", "incele", "inceleme", "değişiklik", "degisiklik",
+        "diff", "pull request", "merge", "risk",
+    ),
+    "architecture": (
+        "architecture", "mimari", "structure", "yapı", "yapi", "module", "modül",
+    ),
+    "impact": (
+        "impact", "etki", "blast radius", "dependency", "dependent",
+        "bağımlı", "bagimli",
+    ),
+    "relation": (
+        "caller", "callee", "callers", "callees", "importer",
+        "çağıran", "cagiran", "kim kullan", "kim çağır",
+    ),
+    "search": (
+        "find", "search", "where", "locate", "debug", "bug",
+        "bul", "ara", "nerede", "hata",
+    ),
+}
+
+
+def _infer_context_intent(task: str, requested: str = "auto") -> str:
+    """Resolve an explicit or bilingual natural-language context intent."""
+    valid = {"auto", "orient", *_CONTEXT_INTENT_KEYWORDS}
+    normalized_requested = requested.strip().lower()
+    if normalized_requested not in valid:
+        choices = ", ".join(sorted(valid))
+        raise ValueError(
+            f"unknown context intent {requested!r}; choose one of: {choices}"
+        )
+    if normalized_requested != "auto":
+        return normalized_requested
+
+    normalized_task = task.casefold()
+    for intent in ("review", "architecture", "impact", "relation", "search"):
+        if any(keyword in normalized_task for keyword in _CONTEXT_INTENT_KEYWORDS[intent]):
+            return intent
+    return "orient"
+
+
+@mcp.tool()
+def forcegraph_context_tool(
+    task: str,
+    intent: str = "auto",
+    target: Optional[str] = None,
+    relation: str = "callers_of",
+    changed_files: Optional[list[str]] = None,
+    token_budget: int = 800,
+    agent_id: str = "agent",
+    task_id: Optional[str] = None,
+    repo_root: Optional[str] = None,
+    base: str = "HEAD~1",
+) -> dict:
+    """Turn one natural-language coding task into focused graph context.
+
+    This is the default entry point for ForceGraph-connected agents. It detects
+    Turkish and English task intent, selects the appropriate graph query, forces
+    compact detail, and converts the requested token budget into bounded search
+    results and traversal depth. Use explicit intent only when auto detection is
+    not suitable.
+
+    Intents: auto, orient, search, impact, architecture, relation, review.
+    For relation queries, set target and optionally relation (for example
+    callers_of, callees_of, imports_of, importers_of, or tests_for).
+    """
+    if not 200 <= token_budget <= 4000:
+        raise ValueError("token_budget must be between 200 and 4000")
+
+    root = _resolve_repo_root(repo_root)
+    selected = _infer_context_intent(task, intent)
+    result_limit = max(3, min(20, token_budget // 100))
+    max_depth = 1 if token_budget < 600 else 2
+
+    if selected == "search":
+        payload = semantic_search_nodes(
+            query=target or task,
+            limit=result_limit,
+            repo_root=root,
+            detail_level="minimal",
+        )
+    elif selected == "impact":
+        payload = get_impact_radius(
+            changed_files=changed_files,
+            max_depth=max_depth,
+            repo_root=root,
+            base=base,
+            detail_level="minimal",
+        )
+    elif selected == "architecture":
+        payload = get_architecture_overview_func(
+            repo_root=root,
+            detail_level="minimal",
+        )
+    elif selected == "relation":
+        payload = query_graph(
+            pattern=relation,
+            target=target or task,
+            repo_root=root,
+            detail_level="minimal",
+            max_results=result_limit,
+        )
+    elif selected == "review":
+        payload = get_review_context(
+            changed_files=changed_files,
+            max_depth=max_depth,
+            include_source=False,
+            max_lines_per_file=0,
+            repo_root=root,
+            base=base,
+            detail_level="minimal",
+        )
+    else:
+        payload = get_minimal_context(
+            task=task,
+            changed_files=changed_files,
+            repo_root=root,
+            base=base,
+        )
+
+    response = with_provenance(payload, root)
+    response["forcegraph_gateway"] = {
+        "intent": selected,
+        "requested_token_budget": token_budget,
+        "detail_level": "minimal",
+        "result_limit": result_limit,
+        "max_depth": max_depth,
+    }
+    memory_root = Path(root) if root else Path.cwd()
+    shared_memory = read_agent_memory(
+        memory_root,
+        task_id=task_id,
+        limit=8,
+        max_chars=max(400, min(1600, token_budget)),
+    )
+    if shared_memory["entries"]:
+        response["shared_agent_memory"] = shared_memory
+    response["forcegraph_gateway"]["agent_id"] = agent_id
+    response["forcegraph_gateway"]["task_id"] = task_id
+    return response
+
+
+@mcp.tool()
+def forcegraph_memory_tool(
+    action: str = "read",
+    agent_id: str = "agent",
+    content: Optional[str] = None,
+    task_id: Optional[str] = None,
+    kind: str = "note",
+    ttl_hours: int = 72,
+    limit: int = 12,
+    repo_root: Optional[str] = None,
+) -> dict:
+    """Share bounded local memory between agents working in the same repository.
+
+    Actions:
+    - read: return recent unexpired notes, decisions, findings, and handoffs;
+    - write: publish content for other agents;
+    - handoff: publish content as an explicit handoff.
+
+    Memory is stored in a separate local SQLite WAL database, supports concurrent
+    terminal processes, redacts common secret assignments, expires automatically,
+    and never requires a cloud service. Use the same task_id to isolate one team
+    task from unrelated work.
+    """
+    normalized_action = action.strip().lower()
+    if normalized_action not in {"read", "write", "handoff"}:
+        raise ValueError("action must be read, write, or handoff")
+
+    root = _resolve_repo_root(repo_root)
+    memory_root = Path(root) if root else Path.cwd()
+    published = None
+    if normalized_action in {"write", "handoff"}:
+        if not content:
+            raise ValueError("content is required for write and handoff actions")
+        published = publish_agent_memory(
+            memory_root,
+            agent_id=agent_id,
+            content=content,
+            task_id=task_id,
+            kind="handoff" if normalized_action == "handoff" else kind,
+            ttl_hours=ttl_hours,
+        )
+
+    result = read_agent_memory(
+        memory_root,
+        task_id=task_id,
+        limit=limit,
+        max_chars=2400,
+    )
+    result["action"] = normalized_action
+    if published is not None:
+        result["published"] = published
+    return result
 
 
 @mcp.tool()
@@ -1006,15 +1204,10 @@ def pre_merge_check(base: str = "HEAD~1") -> list[dict]:
 
 
 COMPACT_TOOL_NAMES: tuple[str, ...] = (
-    "build_or_update_graph_tool",
-    "get_minimal_context_tool",
-    "get_impact_radius_tool",
-    "query_graph_tool",
-    "get_review_context_tool",
-    "semantic_search_nodes_tool",
-    "get_architecture_overview_tool",
+    "forcegraph_context_tool",
+    "forcegraph_memory_tool",
     "detect_changes_tool",
-    "traverse_graph_tool",
+    "build_or_update_graph_tool",
 )
 
 TOOL_PROFILES: dict[str, tuple[str, ...] | None] = {
@@ -1124,8 +1317,8 @@ def main(
         repo_root: Default repository root for all tool calls.
         tools: Comma-separated list of tool names to expose.
             Falls back to ``CRG_TOOLS`` env var and takes precedence over profiles.
-        tool_profile: Named MCP surface: ``"compact"`` exposes the nine
-            high-value tools used for normal agent work; ``"full"`` exposes all
+        tool_profile: Named MCP surface: ``"compact"`` exposes the four
+            agent-facing tools used for normal agent work; ``"full"`` exposes all
             tools. Falls back to ``CRG_TOOL_PROFILE``, then ``"full"``.
         auto_watch: Start filesystem watcher in a background daemon thread
             while the MCP server runs.

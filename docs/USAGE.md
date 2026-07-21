@@ -10,7 +10,7 @@ uvx --from "git+https://github.com/samansarmasik-alt/code-review-graph.git" forc
 
 This is the recommended path: it auto-detects clients, connects MCP, builds the
 graph, verifies readiness, and creates a generic MCP config for other tools.
-Connected clients automatically use the compact nine-tool MCP profile, while
+Connected clients automatically use the compact four-tool MCP profile, while
 `forcegraph serve --tool-profile full` remains available for advanced workflows.
 
 The compatible two-step flow remains available:
@@ -58,6 +58,18 @@ The CodeBuddy project layout follows its official documentation for
 [hooks](https://www.codebuddy.ai/docs/cli/hooks). The shared `.mcp.json` is
 merged with JSONC awareness, while hook commands resolve the repository at
 runtime so committed settings do not contain one developer's checkout path.
+
+## Shared memory for parallel agents
+
+Agents in separate terminals can exchange bounded local notes:
+
+- `forcegraph_memory_tool(action="write", agent_id="worker-1", task_id="issue-42", content="...")`
+- `forcegraph_memory_tool(action="handoff", agent_id="worker-1", task_id="issue-42", content="...")`
+- `forcegraph_memory_tool(action="read", agent_id="worker-2", task_id="issue-42")`
+
+Normal `forcegraph_context_tool` calls automatically include recent memory for
+the same task. Entries expire by default, common secret assignments are redacted,
+and response size is bounded so shared memory does not become a second transcript.
 
 ## Core Workflow
 

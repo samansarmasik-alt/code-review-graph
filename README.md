@@ -40,7 +40,13 @@ GitHub Copilot ve CodeBuddy desteklenir.
 Bu işlem yalnızca bir kez yapılır. Sonrasında AI aracı ForceGraph MCP sunucusunu
 otomatik başlatır; `--auto-watch` dosya değişikliklerini kendiliğinden indeksler.
 Günlük kullanım için `build`, `update` veya `watch` komutu çalıştırmanız gerekmez.
-Kurulum ayrıca dokuz yüksek değerli araca sahip kompakt MCP profilini etkinleştirir.
+Kurulum ayrıca yalnızca dört agent aracına sahip kompakt MCP geçidini etkinleştirir.
+Bunlardan `forcegraph_memory_tool`, aynı repo üzerinde çalışan farklı terminal
+ve agent süreçlerinin karar, bulgu ve handoff notlarını yerel SQLite üzerinden
+paylaşmasını sağlar.
+Agent doğal görev cümlenizi `forcegraph_context_tool` aracına verir; araç Türkçe ve
+İngilizce niyeti algılayıp arama, mimari, etki, ilişki veya inceleme bağlamını
+düşük ayrıntıyla kendisi seçer.
 Böylece onlarca kullanılmayan araç şeması her agent turunda tekrar taşınmaz.
 İhtiyaç hâlinde `forcegraph serve --tool-profile full` ile bütün araçlar açılabilir.
 
@@ -60,6 +66,41 @@ AI aracına yaptırmak isterseniz yalnızca şunu söyleyin:
 
 > Bu repoya ForceGraph'ı bağla. AI_INSTALL.md dosyasını uygula ve receipt hazır
 > olmadan işlemi tamamlandı sayma.
+
+### Neden upstream yerine ForceGraph?
+
+ForceGraph, `tirth8205/code-review-graph` motorunu ve MIT lisanslı temelini
+korur. Farkımız grafı yeniden icat etmek değil, grafı her agent için yorucu
+ayarlar gerektirmeyen bir bağlam geçidine dönüştürmektir.
+
+| Konu | Upstream code-review-graph | ForceGraph |
+| --- | --- | --- |
+| Yerel yapısal kod grafı | Var | Var; uyumlu temel |
+| İlk kurulum | Platform/komut seçilebilir | Tek `forcegraph connect`, otomatik algılama |
+| Güncellik | Hook/watch seçenekleri | Bağlı istemcide otomatik watch |
+| Agent araç yüzeyi | Geniş uzman araç seti | Varsayılan 4 araçlık kompakt geçit |
+| Doğal görev yönlendirme | Minimal başlangıç bağlamı | Türkçe/İngilizce niyet → doğru sorgu |
+| Bilinmeyen MCP istemcisi | Manuel yapılandırılabilir | Taşınabilir MCP manifesti üretir |
+| Kurulum kanıtı | Durum komutları | Makine-okunur `ready` receipt |
+
+Tam analiz yüzeyini tek tek kontrol etmek isteyen uzmanlar upstream veya
+`--tool-profile full` kullanabilir. “Repoya bağla ve kendisi doğru bağlamı
+seçsin” isteyen agent uygulamaları için ForceGraph daha uygun katmandır.
+
+### Çoklu agent ortak hafızası
+
+Aynı proje üzerinde çalışan terminal agent’ları ortak bir `task_id` kullanır.
+Her agent kısa bir karar, bulgu veya handoff bırakabilir; diğer agent’ın normal
+`forcegraph_context_tool` çağrısı ilgili son kayıtları otomatik görür.
+
+- Ayrı servis ve hesap gerektirmez; repo içindeki yerel SQLite WAL kullanılır.
+- Eşzamanlı terminal süreçlerine uygundur.
+- Kayıtlar varsayılan 72 saatte sona erer ve okuma çıktısı sınırlandırılır.
+- Yaygın token, parola ve API anahtarı atamaları yazılmadan önce maskelenir.
+- Grafik verisi gibi `.code-review-graph/` altında kalır ve commit edilmez.
+
+Bu, agent’ların tüm konuşma geçmişini birbirine kopyalamaz. Yalnızca işe yarayan
+kısa kararları ve handoff’ları paylaşarak bağlam şişmesini önler.
 
 ### Ne kazandırır?
 
@@ -141,8 +182,10 @@ builds the graph, and writes a machine-readable receipt. It supports Codex,
 Claude Code, Cursor, Windsurf, Zed, Continue, OpenCode, Gemini CLI, Qwen Code,
 Qoder, Kiro, GitHub Copilot, and CodeBuddy.
 
-Connected clients use the compact nine-tool MCP profile by default, reducing
-tool-schema overhead while keeping the full surface available with
+Connected clients use a four-tool context gateway by default. The
+`forcegraph_context_tool` routes English or Turkish tasks to compact search,
+architecture, impact, relationship, or review context. The full surface remains
+available with
 `forcegraph serve --tool-profile full`.
 
 Unknown or future MCP clients can use the generated
