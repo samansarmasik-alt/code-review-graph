@@ -69,21 +69,42 @@ login()
 
 ### Hızlı başlangıç
 
-Bu ilk geliştirme sürümünde upstream ile uyumlu CLI kullanılmaktadır:
+Bir AI kodlama aracına yalnızca şunu söyleyebilirsiniz:
+
+> Bu projeye ForceGraph'ı entegre et. [AI_INSTALL.md](AI_INSTALL.md) talimatlarını
+> uygula, `quickstart-receipt.json` durumu `ready` olana kadar kurulumu doğrula.
+
+Ya da proje klasöründe tek komut çalıştırın:
+
+```bash
+uvx --from "git+https://github.com/samansarmasik-alt/code-review-graph.git" forcegraph quickstart --platform codex --yes
+```
+
+`codex` yerine kullandığınız aracı yazabilirsiniz: `claude-code`, `cursor`,
+`windsurf`, `gemini-cli`, `qoder`, `kiro`, `copilot` veya `codebuddy`.
+
+Komut tek seferde:
+
+1. MCP yapılandırmasını kurar.
+2. Araca özgü talimat, skill ve hook'ları hazırlar.
+3. Kaynak kod grafını oluşturur.
+4. Sonucu `.code-review-graph/quickstart-receipt.json` dosyasında doğrular.
+5. Yeniden başlatma gerekip gerekmediğini açıkça bildirir.
+
+Kurulu paketle aynı işlem:
 
 ```bash
 pip install code-review-graph
-code-review-graph install
-code-review-graph build
+forcegraph quickstart --platform codex --yes
 ```
 
 Kaynak koddan geliştirmek için:
 
 ```bash
 git clone https://github.com/samansarmasik-alt/code-review-graph.git
-cd ForceGraph
+cd code-review-graph
 uv sync --group dev
-uv run code-review-graph build
+uv run forcegraph quickstart --platform codex --yes
 ```
 
 Yararlı komutlar:
@@ -162,15 +183,29 @@ reading an entire codebase.
 - Local SQLite storage with no required cloud database
 - Interactive graph visualisation and export
 - Broad language and framework coverage
+- One-command, agent-readable onboarding with a verifiable installation receipt
 
 ForceGraph is an active development fork of
 [`tirth8205/code-review-graph`](https://github.com/tirth8205/code-review-graph).
 The current release intentionally retains the upstream CLI and package identifiers
 for compatibility while ForceGraph-specific integration layers are developed.
 
+### One-command integration
+
+Ask your coding agent to follow [AI_INSTALL.md](AI_INSTALL.md), or run:
+
+```bash
+uvx --from "git+https://github.com/samansarmasik-alt/code-review-graph.git" forcegraph quickstart --platform codex --yes
+```
+
+The command configures the selected AI platform, builds the graph, and writes a
+machine-readable readiness receipt to
+`.code-review-graph/quickstart-receipt.json`.
+
 ## Documentation
 
 - [ForceGraph roadmap](docs/FORCEGRAPH_ROADMAP.md)
+- [AI installation contract](AI_INSTALL.md)
 - [Upstream README snapshot](docs/UPSTREAM_README.md)
 - [Usage guide](docs/USAGE.md)
 - [Command reference](docs/COMMANDS.md)

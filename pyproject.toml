@@ -47,6 +47,7 @@ Issues = "https://github.com/tirth8205/code-review-graph/issues"
 
 [project.scripts]
 code-review-graph = "code_review_graph.cli:main"
+forcegraph = "code_review_graph.cli:main"
 crg-daemon = "code_review_graph.daemon_cli:main"
 
 [project.optional-dependencies]

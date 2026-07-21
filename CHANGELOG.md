@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### ForceGraph additions
+
+- Added `forcegraph` as a compatibility-preserving CLI alias.
+- Added `forcegraph quickstart`, which installs the selected AI integration,
+  builds the graph, verifies the result, and writes a machine-readable readiness
+  receipt in `.code-review-graph/quickstart-receipt.json`.
+- Added `AI_INSTALL.md`, a deterministic installation contract that AI coding
+  agents can follow without requiring users to understand MCP configuration.
+
 ## [2.3.7] - 2026-07-18
 
 **Maintainer-reconciliation release.** This release packages the verified work

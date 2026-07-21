@@ -10,6 +10,7 @@ tests, documentation, and compatibility checks are complete.
 - [x] Establish ForceGraph identity and attribution
 - [x] Retain upstream CLI compatibility during the transition
 - [x] Record the initial upstream baseline
+- [x] Add a one-command, AI-readable installation and verification flow
 - [ ] Add a dedicated ForceGraph release and compatibility policy
 
 ## Phase 1 — Context bundle protocol
@@ -41,7 +42,8 @@ tests, documentation, and compatibility checks are complete.
 
 - [ ] Turkish and English first-run experience
 - [ ] Reliable Windows installation and path handling
-- [ ] ForceGraph-native command and package names with migration aliases
+- [x] Add the `forcegraph` command alias without breaking the upstream CLI
+- [ ] Publish a ForceGraph-native package name with a migration policy
 - [ ] Lightweight local dashboard for architecture and impact exploration
 - [ ] Incremental performance benchmarks on large mixed-language repositories
 
@@ -54,4 +56,3 @@ Every ForceGraph-specific feature should include:
 3. Token, latency, and correctness evidence for optimisation claims.
 4. A migration path for persisted SQLite data or configuration changes.
 5. Documentation that distinguishes implemented behaviour from planned work.
-

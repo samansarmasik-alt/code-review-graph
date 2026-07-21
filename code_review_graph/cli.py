@@ -1,6 +1,7 @@
 """CLI entry point for code-review-graph.
 
 Usage:
+    code-review-graph quickstart [--platform PLATFORM] [--repo PATH]
     code-review-graph install
     code-review-graph init
     code-review-graph uninstall [--dry-run] [--yes] [--repo PATH]
@@ -118,6 +119,7 @@ def _print_banner() -> None:
 
   {b}Commands:{r}
     {g}install{r}     Set up MCP server for AI coding platforms
+    {g}quickstart{r}  Install, build, and verify in one command
     {g}init{r}        Alias for install
     {g}build{r}       Full graph build {d}(parse all files){r}
     {g}update{r}      Incremental update {d}(changed files only){r}
@@ -194,7 +196,7 @@ def _confirm_yes_no(prompt: str, default_yes: bool = True) -> bool:
     return answer in ("y", "yes")
 
 
-def _handle_init(args: argparse.Namespace) -> None:
+def _handle_init(args: argparse.Namespace) -> dict[str, object]:
     """Set up MCP config for detected AI coding platforms."""
     from .incremental import ensure_repo_gitignore_excludes_crg, find_repo_root
     from .skills import install_platform_configs
@@ -229,7 +231,11 @@ def _handle_init(args: argparse.Namespace) -> None:
     if dry_run:
         print("\n[dry-run] Would ensure .gitignore ignores .code-review-graph/.")
         print("[dry-run] No files were modified.")
-        return
+        return {
+            "repo_root": str(repo_root.resolve()),
+            "configured_platforms": list(configured),
+            "dry_run": True,
+        }
 
     gitignore_state = ensure_repo_gitignore_excludes_crg(repo_root)
     if gitignore_state == "created":
@@ -349,10 +355,117 @@ def _handle_init(args: argparse.Namespace) -> None:
         except Exception as exc:
             logger.warning("Could not install OpenCode plugin: %s", exc)
 
+    if not getattr(args, "quickstart", False):
+        print()
+        print("Next steps:")
+        print("  1. code-review-graph build    # build the knowledge graph")
+        print("  2. Restart your AI coding tool to pick up the new config")
+    return {
+        "repo_root": str(repo_root.resolve()),
+        "configured_platforms": list(configured),
+        "dry_run": False,
+    }
+
+
+def _handle_quickstart(args: argparse.Namespace) -> dict[str, object]:
+    """Install integrations, build the graph, and leave a machine-readable receipt.
+
+    ``quickstart`` is intentionally opinionated: invoking it is explicit consent
+    to install the selected platform integration and inject graph-aware
+    instructions. It therefore runs the existing installer non-interactively.
+    Individual surfaces can still be disabled with the same ``--no-*`` flags as
+    ``install``.
+    """
+    from .incremental import find_repo_root, get_db_path
+
+    repo_root = Path(args.repo).expanduser() if args.repo else find_repo_root()
+    if not repo_root:
+        repo_root = Path.cwd()
+    repo_root = repo_root.resolve()
+    args.repo = str(repo_root)
+    args.yes = True
+    args.quickstart = True
+
+    print("ForceGraph quickstart")
+    print(f"Repository: {repo_root}")
     print()
-    print("Next steps:")
-    print("  1. code-review-graph build    # build the knowledge graph")
-    print("  2. Restart your AI coding tool to pick up the new config")
+
+    install_result = _handle_init(args)
+    if getattr(args, "dry_run", False):
+        if not getattr(args, "no_build", False):
+            mode = "minimal" if getattr(args, "fast", False) else "full"
+            print(f"[dry-run] Would build the graph (postprocess={mode}).")
+        return {
+            **install_result,
+            "status": "dry-run",
+            "graph_built": False,
+        }
+
+    build_summary: dict[str, object] = {
+        "built": False,
+        "files": 0,
+        "nodes": 0,
+        "edges": 0,
+        "errors": 0,
+    }
+    if not getattr(args, "no_build", False):
+        from .tools.build import build_or_update_graph
+
+        postprocess = "minimal" if getattr(args, "fast", False) else "full"
+        print("Building the code graph...")
+        result = build_or_update_graph(
+            full_rebuild=True,
+            repo_root=str(repo_root),
+            postprocess=postprocess,
+        )
+        build_summary = {
+            "built": True,
+            "files": int(result.get("files_parsed", 0)),
+            "nodes": int(result.get("total_nodes", 0)),
+            "edges": int(result.get("total_edges", 0)),
+            "errors": len(result.get("errors") or []),
+            "postprocess": postprocess,
+        }
+
+    receipt = {
+        "schema_version": 1,
+        "status": "ready",
+        "repo_root": str(repo_root),
+        "configured_platforms": install_result["configured_platforms"],
+        "graph": build_summary,
+        "restart_required": bool(install_result["configured_platforms"]),
+        "next_prompt": (
+            "Use the ForceGraph MCP tools first. Inspect the architecture and "
+            "impact radius before editing code."
+        ),
+    }
+    receipt_path = get_db_path(repo_root).parent / "quickstart-receipt.json"
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = receipt_path.with_suffix(".json.tmp")
+    temporary_path.write_text(
+        json.dumps(receipt, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    os.replace(temporary_path, receipt_path)
+
+    platforms = ", ".join(install_result["configured_platforms"]) or "CLI only"
+    print()
+    print("ForceGraph is ready.")
+    print(f"  Platforms: {platforms}")
+    if build_summary["built"]:
+        print(
+            "  Graph: "
+            f"{build_summary['files']} files, {build_summary['nodes']} nodes, "
+            f"{build_summary['edges']} edges"
+        )
+    else:
+        print("  Graph: skipped (--no-build)")
+    print(f"  Receipt: {receipt_path}")
+    if receipt["restart_required"]:
+        print("  Final step: restart your AI coding tool, then ask it to use ForceGraph.")
+    else:
+        print("  No AI platform was detected; the CLI graph is still ready to use.")
+    return receipt
 
 
 def _handle_data_dir_option(args, repo_root: Path) -> None:
@@ -527,6 +640,50 @@ def main() -> None:
     )
     ap.add_argument("-v", "--version", action="store_true", help="Show version and exit")
     sub = ap.add_subparsers(dest="command")
+
+    quickstart_cmd = sub.add_parser(
+        "quickstart",
+        help="Install integrations, build the graph, and verify readiness",
+    )
+    quickstart_cmd.add_argument("--repo", default=None, help="Repository root (auto-detected)")
+    quickstart_cmd.add_argument(
+        "--platform",
+        choices=_PLATFORM_CHOICES,
+        default="all",
+        help="Target platform (default: all detected)",
+    )
+    quickstart_cmd.add_argument(
+        "--fast",
+        action="store_true",
+        help="Build with minimal post-processing for a faster first run",
+    )
+    quickstart_cmd.add_argument(
+        "--no-build",
+        action="store_true",
+        help="Install integrations without building the graph",
+    )
+    quickstart_cmd.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview installation and graph build without writing files",
+    )
+    quickstart_cmd.add_argument(
+        "--no-skills",
+        action="store_true",
+        help="Skip generating platform-native skill files",
+    )
+    quickstart_cmd.add_argument(
+        "--no-hooks",
+        action="store_true",
+        help="Skip installing platform-native hooks",
+    )
+    quickstart_cmd.add_argument(
+        "--no-instructions",
+        action="store_true",
+        help="Skip injecting graph-aware AI instruction files",
+    )
+    quickstart_cmd.add_argument("-y", "--yes", action="store_true", help=argparse.SUPPRESS)
+    quickstart_cmd.set_defaults(yes=True)
 
     # install (primary) + init (alias)
     install_cmd = sub.add_parser("install", help="Register MCP server with AI coding platforms")
@@ -1315,6 +1472,10 @@ def main() -> None:
         )
         if uninstall_result.errors:
             raise SystemExit(1)
+        return
+
+    if args.command == "quickstart":
+        _handle_quickstart(args)
         return
 
     if args.command in ("init", "install"):
