@@ -1005,7 +1005,28 @@ def pre_merge_check(base: str = "HEAD~1") -> list[dict]:
     return pre_merge_check_prompt(base=base)
 
 
-def _apply_tool_filter(tools: str | None = None) -> None:
+COMPACT_TOOL_NAMES: tuple[str, ...] = (
+    "build_or_update_graph_tool",
+    "get_minimal_context_tool",
+    "get_impact_radius_tool",
+    "query_graph_tool",
+    "get_review_context_tool",
+    "semantic_search_nodes_tool",
+    "get_architecture_overview_tool",
+    "detect_changes_tool",
+    "traverse_graph_tool",
+)
+
+TOOL_PROFILES: dict[str, tuple[str, ...] | None] = {
+    "compact": COMPACT_TOOL_NAMES,
+    "full": None,
+}
+
+
+def _apply_tool_filter(
+    tools: str | None = None,
+    tool_profile: str | None = None,
+) -> None:
     """Remove tools not listed in the allow-list.
 
     Accepts a comma-separated string of tool names to keep.  When set,
@@ -1017,7 +1038,10 @@ def _apply_tool_filter(tools: str | None = None) -> None:
     1. ``tools`` argument (from ``serve --tools ...``).
     2. ``CRG_TOOLS`` environment variable.
 
-    When neither is set, all tools remain available.
+    If neither explicit allow-list is set, ``tool_profile`` or
+    ``CRG_TOOL_PROFILE`` selects a named surface. The default ``full``
+    profile preserves backwards compatibility; generated ForceGraph connections
+    use ``compact``.
 
     This is useful for token-constrained environments: CRG exposes 28+
     tools by default (~8k description tokens per LLM turn).  Filtering
@@ -1035,11 +1059,19 @@ def _apply_tool_filter(tools: str | None = None) -> None:
     import os
 
     raw = tools or os.environ.get("CRG_TOOLS")
-    if not raw:
-        return
-    allowed = {t.strip() for t in raw.split(",") if t.strip()}
-    if not allowed:
-        return
+    if raw:
+        allowed = {t.strip() for t in raw.split(",") if t.strip()}
+        if not allowed:
+            return
+    else:
+        profile = (tool_profile or os.environ.get("CRG_TOOL_PROFILE") or "full").lower()
+        if profile not in TOOL_PROFILES:
+            choices = ", ".join(sorted(TOOL_PROFILES))
+            raise ValueError(f"unknown tool profile {profile!r}; choose one of: {choices}")
+        profile_tools = TOOL_PROFILES[profile]
+        if profile_tools is None:
+            return
+        allowed = set(profile_tools)
     # FastMCP >=3 exposes tool enumeration via the async ``list_tools``
     # method.  ``_apply_tool_filter`` is typically called from
     # ``main()`` before the MCP event loop starts, but tests may invoke
@@ -1071,6 +1103,7 @@ def _apply_tool_filter(tools: str | None = None) -> None:
 def main(
     repo_root: str | None = None,
     tools: str | None = None,
+    tool_profile: str | None = None,
     auto_watch: bool = False,
     *,
     transport: str = "stdio",
@@ -1090,8 +1123,10 @@ def main(
     Args:
         repo_root: Default repository root for all tool calls.
         tools: Comma-separated list of tool names to expose.
-            Falls back to ``CRG_TOOLS`` env var.  When unset, all
-            tools are available.
+            Falls back to ``CRG_TOOLS`` env var and takes precedence over profiles.
+        tool_profile: Named MCP surface: ``"compact"`` exposes the nine
+            high-value tools used for normal agent work; ``"full"`` exposes all
+            tools. Falls back to ``CRG_TOOL_PROFILE``, then ``"full"``.
         auto_watch: Start filesystem watcher in a background daemon thread
             while the MCP server runs.
         transport: ``"stdio"`` (default) or ``"streamable-http"`` for local HTTP.
@@ -1101,7 +1136,7 @@ def main(
     global _default_repo_root
     root = Path(repo_root) if repo_root else find_project_root()
     _default_repo_root = str(root)
-    _apply_tool_filter(tools)
+    _apply_tool_filter(tools, tool_profile)
 
     previous_stdio_state = _incremental._MCP_STDIO_ACTIVE
     _incremental._MCP_STDIO_ACTIVE = transport == "stdio"

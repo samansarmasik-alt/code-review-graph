@@ -470,6 +470,7 @@ def _handle_quickstart(args: argparse.Namespace) -> dict[str, object]:
         "graph": build_summary,
         "restart_required": bool(install_result["configured_platforms"]),
         "auto_watch": universal,
+        "tool_profile": "compact" if universal else "full",
         "next_prompt": (
             "ForceGraph auto-updates while the MCP client is running. Use its "
             "tools first; inspect architecture and impact before editing code."
@@ -1242,6 +1243,15 @@ def main() -> None:
         ),
     )
     serve_cmd.add_argument(
+        "--tool-profile",
+        choices=["compact", "full"],
+        default=None,
+        help=(
+            "Named MCP tool surface. compact exposes nine high-value tools; "
+            "full exposes every tool. Explicit --tools takes precedence."
+        ),
+    )
+    serve_cmd.add_argument(
         "--http",
         action="store_true",
         help="Listen for MCP over Streamable HTTP on localhost (default port 5555)",
@@ -1266,6 +1276,12 @@ def main() -> None:
         "--auto-watch",
         action="store_true",
         help="Start filesystem watch in a daemon thread while MCP server runs",
+    )
+    mcp_cmd.add_argument(
+        "--tool-profile",
+        choices=["compact", "full"],
+        default=None,
+        help="Named MCP tool surface (default: full)",
     )
 
     # daemon
@@ -1402,11 +1418,21 @@ def main() -> None:
                     host=host,
                     port=port,
                     tools=args.tools,
+                    tool_profile=args.tool_profile,
                 )
             else:
-                serve_main(repo_root=args.repo, auto_watch=auto_watch, tools=args.tools)
+                serve_main(
+                    repo_root=args.repo,
+                    auto_watch=auto_watch,
+                    tools=args.tools,
+                    tool_profile=args.tool_profile,
+                )
         else:
-            serve_main(repo_root=args.repo, auto_watch=auto_watch)
+            serve_main(
+                repo_root=args.repo,
+                auto_watch=auto_watch,
+                tool_profile=args.tool_profile,
+            )
         return
 
     if args.command == "daemon":

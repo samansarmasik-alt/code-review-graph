@@ -1129,7 +1129,9 @@ class TestInstallPlatformConfigs:
         data = json.loads(gemini_config.read_text())
         entry = data["mcpServers"]["code-review-graph"]
         assert "type" not in entry
-        assert entry["args"][-2:] == ["serve", "--auto-watch"]
+        assert entry["args"][-4:] == [
+            "serve", "--auto-watch", "--tool-profile", "compact",
+        ]
 
     def test_install_qwen_config(self, tmp_path):
         """Qwen Code uses ~/.qwen/settings.json with mcpServers (see #83)."""
@@ -1149,7 +1151,9 @@ class TestInstallPlatformConfigs:
         data = json.loads(qwen_config.read_text())
         entry = data["mcpServers"]["code-review-graph"]
         assert entry["type"] == "stdio"
-        assert entry["args"][-2:] == ["serve", "--auto-watch"]
+        assert entry["args"][-4:] == [
+            "serve", "--auto-watch", "--tool-profile", "compact",
+        ]
 
     def test_install_qwen_preserves_existing_servers(self, tmp_path):
         """Adding qwen should merge with, not clobber, existing mcpServers."""
